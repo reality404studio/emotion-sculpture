@@ -6,44 +6,30 @@
 //   index 2 · 제발! (please / 긴장) — 홀드(hold)       — 파랑  — 240°
 
 export const EMOTIONS = [
+  // 팔레트는 emotion-trophy-spec.md §3의 딥 램프 기준값.
   {
     key: 'yes',
     label: 'YES!',
     hint: 'rapid tap',
     input: 'tap',
-    hex: 0xf59e0b, // 금빛
-    rgb: [0.96, 0.62, 0.04],
-    // 넓고 둥근 융기 — 환희는 크게 부푼다
-    lobeWidth: 1.05,
-    lobeAmp: 1.35,
-    sharpen: 1.0,
-    rough: 1.0, // 연타 링은 오돌토돌
+    hex: 0xf5a524, // 골드 — 바깥으로 피어나는 방울
+    rgb: [0.961, 0.647, 0.141],
   },
   {
     key: 'no',
     label: 'NO!',
     hint: 'tap',
     input: 'single',
-    hex: 0xef4444, // 빨강
-    rgb: [0.94, 0.27, 0.27],
-    // 좁고 날카로운 융기 — 단발 스파이크
-    lobeWidth: 0.42,
-    lobeAmp: 1.7,
-    sharpen: 1.6,
-    rough: 0.15,
+    hex: 0xe4573d, // 레드 — 안으로 물리는 접힘
+    rgb: [0.894, 0.341, 0.239],
   },
   {
     key: 'please',
     label: 'PLEASE!',
     hint: 'hold',
     input: 'hold',
-    hex: 0x3b82f6, // 차가운 파랑
-    rgb: [0.23, 0.51, 0.96],
-    // 아주 넓고 매끄러운 팽창 — 지속되는 긴장
-    lobeWidth: 1.55,
-    lobeAmp: 1.15,
-    sharpen: 1.0,
-    rough: 0.0, // 홀드는 매끄럽게
+    hex: 0x3b82f6, // 블루 — 견디는 팽창 띠
+    rgb: [0.231, 0.51, 0.965],
   },
 ];
 

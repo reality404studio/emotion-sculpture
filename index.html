@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Emotion Sculpture — Feel it. Leave it.</title>
+    <title>Emotion Trophy — Feel it. Cast it.</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -14,16 +14,14 @@
     <header id="topbar">
       <div class="match">
         <span class="brand-mark">EMOTION / 01</span>
-        <span id="match-label">France vs Spain · SF</span>
         <span id="phase-tag">Before kickoff</span>
       </div>
-      <div id="progress"><div id="progress-fill"></div></div>
     </header>
 
     <div id="scene-copy" aria-hidden="true">
-      <span class="eyebrow">A living record of your reaction</span>
-      <span class="scene-title">Feel it.<br /><em>Leave it.</em></span>
-      <span class="scene-subtitle">Every touch becomes a new layer of the memory.</span>
+      <span class="eyebrow">Goals go on the scoreboard. Passion gets a trophy.</span>
+      <span class="scene-title">Feel it.<br /><em>Cast it.</em></span>
+      <span class="scene-subtitle">Every touch is cast into your trophy — and stays forever.</span>
     </div>
 
     <!-- 하이라이트 영상 (한 시야 안에 영상+버튼) -->
@@ -38,7 +36,11 @@
           allowfullscreen
         ></iframe>
       </div>
-      <p class="video-note">Play the highlight. Let your hands react.</p>
+      <div class="video-input">
+        <input id="yt-url" type="text" placeholder="Paste a YouTube link…" spellcheck="false" />
+        <button id="yt-load">Load</button>
+      </div>
+      <p class="video-note" id="video-note">Play the highlight. Let your hands react.</p>
     </div>
 
     <!-- 시작/종료 컨트롤 -->
@@ -49,28 +51,40 @@
 
     <!-- 감정 입력 팔레트 (§6) — 크고 멀찍이 -->
     <div id="palette" hidden>
-      <button class="emo-btn" data-emo="0" style="--c: #f59e0b">
-        <span class="emo-label">좋아!</span>
-        <span class="emo-hint">rapid tap · J</span>
+      <button class="emo-btn" data-emo="0" style="--c: #f5a524">
+        <span class="emo-label">YES!</span>
+        <span class="emo-hint">rapid tap · <kbd>J</kbd></span>
       </button>
-      <button class="emo-btn" data-emo="1" style="--c: #ef4444">
-        <span class="emo-label">안돼!</span>
-        <span class="emo-hint">tap · F</span>
+      <button class="emo-btn" data-emo="1" style="--c: #e4573d">
+        <span class="emo-label">NO!</span>
+        <span class="emo-hint">tap · <kbd>F</kbd></span>
       </button>
       <button class="emo-btn" data-emo="2" style="--c: #3b82f6">
-        <span class="emo-label">제발!</span>
-        <span class="emo-hint">hold · Space</span>
+        <span class="emo-label">PLEASE!</span>
+        <span class="emo-hint">hold · <kbd>Space</kbd></span>
       </button>
     </div>
 
     <!-- 결과 / 박제 화면 (§10) -->
     <div id="result" hidden>
       <div class="result-card">
-        <h1>Your finished sculpture</h1>
+        <h1>Your trophy is cast</h1>
         <p class="tagline">This is how I lived that match.</p>
         <div class="result-meta">
+          <div><span>recorded</span><b id="r-duration">–</b></div>
           <div><span>beats</span><b id="r-beats">–</b></div>
           <div><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
+        </div>
+
+        <!-- 결산 — 감정별 횟수·홀드 시간·시간 점유율 -->
+        <div class="report">
+          <div class="pie" id="pie"></div>
+          <div class="legend">
+            <div><i style="--c: var(--gold)"></i><span>YES!</span><b id="rep-yes">–</b></div>
+            <div><i style="--c: var(--red)"></i><span>NO!</span><b id="rep-no">–</b></div>
+            <div><i style="--c: #4a8dff"></i><span>PLEASE!</span><b id="rep-hold">–</b></div>
+            <div><i style="--c: #262c48"></i><span>quiet</span><b id="rep-quiet">–</b></div>
+          </div>
         </div>
 
         <div class="mint-row">
@@ -95,7 +109,7 @@
 
     <!-- 비교 뷰 배지 -->
     <div id="compare-bar" hidden>
-      <span>Same 3 minutes, inverted shape — left: your sculpture · right: rival fan</span>
+      <span>Same match, two trophies — left: yours · right: rival fan, same archetype, opposite scars</span>
       <button id="compare-back" class="ghost">← Back</button>
     </div>
 

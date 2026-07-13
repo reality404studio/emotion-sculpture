@@ -4,13 +4,16 @@
 > **The real passion lives *between* the goals.** This project gives that
 > passion its first place to be recorded: on-chain, unforgeable, forever.
 
-A live 3D sculpture grows from the emotions a viewer pours out while watching a
-3-minute sports highlight. Every tick of the match becomes a stacked ring; the
-three emotions push and pull the ring's radius, color, and texture. When the
-clip ends, the finished sculpture is committed to **Solana devnet** as a
-deterministic hash — proof that *this* feeling was recorded at *this* moment.
+While you watch a 3-minute highlight, molten golden glass rises from a pedestal
+and **casts a trophy in real time**. Your emotions can only touch the molten
+casting front at the top — then they solidify, permanently, into the layers
+below. Bottom = kickoff, rim = final whistle. When the clip ends the finished
+trophy is committed to **Solana devnet** as a deterministic hash — proof that
+*this* feeling was recorded at *this* moment.
 
-Because everyone's emotional flow differs, **no two sculptures are ever the same.**
+Goals go on the scoreboard; passion never got a trophy. Now every fan casts
+their own — and because everyone's emotional flow differs, **no two trophies
+are ever the same.**
 
 ---
 
@@ -29,11 +32,14 @@ each with a *distinct, non-overlapping gesture* so you never have to learn how t
 | **안돼! (No)** | single tap (`F`) | anger / a blown call | red |
 | **제발! (Please)** | hold (`Space`) | tension / holding your breath | blue |
 
-The vertical axis is match time. Each 0.7s tick stacks a new ring whose shape is
-the sum of three smooth radial *lobes* (wide/round for joy, narrow/sharp for
-anger, wide/smooth for tension). **Silence is not a bug — it's rhythm:** quiet
-stretches render as near-perfect calm circles with a slow deterministic pulse,
-making the explosion that follows land harder.
+The vertical axis is match time. All trophies share one fixed archetype profile
+`P(u)` (pedestal → stem → bowl → rim) — emotions modulate it only within
+±25%, so **any input distribution still reads as a beautiful trophy**. Each
+emotion is a different physical phenomenon, not a recolored button: joy blooms
+*outward* as gold droplets, anger bites *inward* as one deep red crease, tension
+swells as a long translucent blue band whose height is literally how long you
+held your breath. **Silence is not a bug — it's rhythm:** quiet stretches stay
+as clear, thin champagne glass, making the eruption that follows land harder.
 
 ### Demo
 - `npm install && npm run dev` → open `http://localhost:5173`
@@ -46,10 +52,11 @@ making the explosion that follows land harder.
 - **같은 경기, 다른 형상** → see a rival fan's inverted sculpture from the same match.
 
 ### The 15-second money shot (sound off, concept still reads)
-Blue **제발!** swells quietly → a red **안돼!** spike snaps out → gold **좋아!**
-erupts as you hammer the tap → the camera pulls back to reveal the whole totem →
-the rival fan's opposite sculpture appears beside it → **Mint** → devnet
-explorer link.
+Molten gold rises from an empty pedestal → a blue **제발!** band swells around
+the stem → a red **안돼!** crease bites the bowl → gold **좋아!** droplets bloom
+as you hammer the tap → the rim fills, whistle, camera pulls back: the trophy is
+cast → the rival fan's trophy appears beside it — same archetype, opposite
+scars → **Mint** → devnet explorer link.
 
 ---
 
@@ -58,14 +65,16 @@ explorer link.
 **Stack:** Vite + vanilla JS + three.js (`BufferGeometry`, `OrbitControls`,
 `UnrealBloom`), `@solana/web3.js` on devnet.
 
-**The sculpture (`src/sculpture.js`)** — Each ring samples 96 points around a
-circle; the radius at angle θ is `baseRadius + Σ intensity[i] · lobe_i(θ − angle_i)`
-where each lobe is a wrapped Gaussian. Per-emotion lobe widths give each feeling
-its own spatial grammar. **Vertex colors are assigned by *direction*, not by
-averaging** — so one ring shows a gold bulge, a red blade, and a blue swell at
-once, and rotating the object actually reveals new information. Overall intensity
-drives brightness, and an `UnrealBloomPass` makes the fierce moments physically
-glow.
+**The trophy (`src/trophy.js`)** — The trophy is an accumulation of up to 150k
+GPU particles over a fixed archetype profile `P(u)`. Every input *births*
+particles differently: a tap splats from a single point into a gold droplet
+cluster; an angry tap snaps scattered points inward into one red vertical seam;
+a hold condenses a cloud into a tight blue thread — one thread per tick you
+endured. Each event draws an origin→adjacent color pair from a gradient ramp,
+so nothing is flat-colored. Settling, shimmer, the finish shockwave and the
+mouse-stir (swirl the finished trophy and watch it scatter and re-gather) are
+all computed in the vertex shader — the CPU only writes new particle
+attributes at input time, so a full-spam match stays at 60 fps.
 
 **Deterministic reproduction (`src/noise.js`, `src/session.js`)** — The whole
 "commit a hash on-chain to prove authenticity" claim only holds if the sculpture
@@ -96,9 +105,9 @@ extension.
 ## Project layout
 ```
 index.html            # video panel + emotion palette + result/compare UI
-src/main.js           # orchestrator: scene, bloom, tick loop, phases, mint flow
+src/main.js           # orchestrator: scene, camera choreography, tick loop, phases, mint flow
 src/emotions.js       # 3-emotion model + intensity dynamics
-src/sculpture.js      # ring lofting → BufferGeometry, direction-based colors
+src/trophy.js         # trophy casting: profile loft, solidify smoothing, molten front
 src/input.js          # tap / single / hold gestures + keyboard
 src/noise.js          # deterministic texture noise (no Math.random)
 src/session.js        # data model + SHA-256 sculpture hash + localStorage

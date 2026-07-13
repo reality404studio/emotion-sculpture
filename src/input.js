@@ -22,6 +22,7 @@ export class InputController {
   constructor({ onVisualPulse } = {}) {
     this.intensities = [BASELINE, BASELINE, BASELINE];
     this.holding = false; // 제발! 홀드 상태
+    this.liveKind = 'quiet';
     // 이 tick 동안 발생한 이벤트 누적(질감 kind 판정용)
     this._tapCount = 0;
     this._singleFired = false;
@@ -44,17 +45,20 @@ export class InputController {
     if (!this.enabled) return;
     this.intensities[0] = clamp01(this.intensities[0] + TAP_GAIN);
     this._tapCount++;
+    this.liveKind = 'tap';
     this.onVisualPulse(0);
   }
   tapNo() {
     if (!this.enabled) return;
     this.intensities[1] = SINGLE_IMPULSE; // 항상 강한 단일 스파이크
     this._singleFired = true;
+    this.liveKind = 'single';
     this.onVisualPulse(1);
   }
   holdPleaseStart() {
     if (!this.enabled) return;
     this.holding = true;
+    this.liveKind = 'hold';
     this.onVisualPulse(2);
   }
   holdPleaseEnd() {

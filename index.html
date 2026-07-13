@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Emotion Sculpture</title>
+    <title>Emotion Sculpture — Feel it. Leave it.</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -13,11 +13,18 @@
     <!-- 상단: 경기 라벨 + 진행 바 -->
     <header id="topbar">
       <div class="match">
-        <span id="match-label">France vs Spain (SF)</span>
+        <span class="brand-mark">EMOTION / 01</span>
+        <span id="match-label">France vs Spain · SF</span>
         <span id="phase-tag">Before kickoff</span>
       </div>
       <div id="progress"><div id="progress-fill"></div></div>
     </header>
+
+    <div id="scene-copy" aria-hidden="true">
+      <span class="eyebrow">A living record of your reaction</span>
+      <span class="scene-title">Feel it.<br /><em>Leave it.</em></span>
+      <span class="scene-subtitle">Every touch becomes a new layer of the memory.</span>
+    </div>
 
     <!-- 하이라이트 영상 (한 시야 안에 영상+버튼) -->
     <div id="video-panel">
@@ -31,27 +38,27 @@
           allowfullscreen
         ></iframe>
       </div>
-      <p class="video-note">Play a highlight and hit the three emotions on reflex.</p>
+      <p class="video-note">Play the highlight. Let your hands react.</p>
     </div>
 
     <!-- 시작/종료 컨트롤 -->
     <div id="controls">
-      <button id="start-btn" class="primary">▶ Start match (grow the sculpture)</button>
-      <button id="end-btn" class="ghost" hidden>■ Finish → Mint</button>
+      <button id="start-btn" class="primary">Start the memory <span>↗</span></button>
+      <button id="end-btn" class="ghost" hidden>Finish memory <span>→</span></button>
     </div>
 
     <!-- 감정 입력 팔레트 (§6) — 크고 멀찍이 -->
     <div id="palette" hidden>
       <button class="emo-btn" data-emo="0" style="--c: #f59e0b">
-        <span class="emo-label">YES!</span>
+        <span class="emo-label">좋아!</span>
         <span class="emo-hint">rapid tap · J</span>
       </button>
       <button class="emo-btn" data-emo="1" style="--c: #ef4444">
-        <span class="emo-label">NO!</span>
+        <span class="emo-label">안돼!</span>
         <span class="emo-hint">tap · F</span>
       </button>
       <button class="emo-btn" data-emo="2" style="--c: #3b82f6">
-        <span class="emo-label">PLEASE!</span>
+        <span class="emo-label">제발!</span>
         <span class="emo-hint">hold · Space</span>
       </button>
     </div>

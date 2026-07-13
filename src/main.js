@@ -3,11 +3,8 @@
 import './polyfills.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { Sculpture, LAYER_HEIGHT } from './sculpture.js';
+import { Sculpture } from './sculpture.js';
 import { InputController } from './input.js';
 import {
   createSession,
@@ -17,7 +14,6 @@ import {
 } from './session.js';
 import { makeAdapter } from './onchain.js';
 import { seedSessions } from './seed-data.js';
-import { EMOTIONS } from './emotions.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
@@ -35,52 +31,57 @@ const resultEl = $('#result');
 const compareBar = $('#compare-bar');
 
 // ─────────────────────────────────────────────────────────────
-// 렌더러 / 씬 / 카메라 / 조명 / bloom
+// 렌더러 / 씬 / 카메라 / 조명
 // ─────────────────────────────────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.16;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.setClearColor(0xf8f9ff, 1);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070c);
-scene.fog = new THREE.FogExp2(0x05070c, 0.02);
+scene.background = new THREE.Color(0xf8f9ff);
+scene.fog = new THREE.FogExp2(0xf3f2ff, 0.014);
 
-const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-camera.position.set(0, 3, 12);
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 4.7, 13.5);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.6;
-controls.target.set(0, 2, 0);
+controls.target.set(0, 3.2, 0);
 
 // 은은한 조명 1~2개 (§5.4)
-scene.add(new THREE.AmbientLight(0x334455, 0.6));
-const key = new THREE.DirectionalLight(0xffffff, 0.8);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xdde5ff, 1.45));
+const key = new THREE.DirectionalLight(0xffffff, 2.1);
 key.position.set(5, 10, 7);
 scene.add(key);
-const rim = new THREE.PointLight(0x3b82f6, 0.5, 40);
-rim.position.set(-6, 4, -6);
+const rim = new THREE.PointLight(0x8aa7ff, 2.3, 36);
+rim.position.set(-6, 5, -6);
 scene.add(rim);
+const warm = new THREE.PointLight(0xffc56c, 1.8, 28);
+warm.position.set(5, 2, 4);
+scene.add(warm);
 
-// bloom: 밝은(격렬한) 정점이 피어오른다 (§5.4)
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(
-  new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.85, // strength
-  0.5, // radius
-  0.18 // threshold
+// A quiet gallery floor: enough grounding to keep the sculpture from floating.
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(10, 96),
+  new THREE.MeshBasicMaterial({ color: 0xf2f1fb, transparent: true, opacity: 0.78 })
 );
-composer.addPass(bloom);
-
-// 바닥 그리드(공간감)
-const grid = new THREE.GridHelper(60, 60, 0x1b2430, 0x0e141d);
-grid.position.y = -0.02;
-scene.add(grid);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -0.035;
+scene.add(floor);
+const halo = new THREE.Mesh(
+  new THREE.CircleGeometry(3.3, 96),
+  new THREE.MeshBasicMaterial({ color: 0xdfe7ff, transparent: true, opacity: 0.32 })
+);
+halo.rotation.x = -Math.PI / 2;
+halo.position.y = -0.025;
+scene.add(halo);
 
 // ─────────────────────────────────────────────────────────────
 // 상태
@@ -101,9 +102,15 @@ let elapsed = 0;
 function startMatch() {
   session = createSession();
   sculpture = new Sculpture(sessionSeed(session));
-  scene.add(sculpture.mesh);
+  scene.add(sculpture.group);
+  sculpture.beginLive();
 
-  input = new InputController({ onVisualPulse: flashButton });
+  input = new InputController({
+    onVisualPulse: (emo) => {
+      flashButton(emo);
+      if (sculpture) sculpture.pulse(emo);
+    },
+  });
   input.enable();
 
   phase = 'live';
@@ -116,6 +123,10 @@ function startMatch() {
   palette.hidden = false;
   resultEl.hidden = true;
   phaseTag.textContent = 'Live — pour your emotions';
+  progressFill.style.width = '0%';
+  document.body.classList.add('is-live');
+  controls.target.set(0, 0.9, 0);
+  camera.position.set(0, 2.7, 11.8);
   controls.autoRotateSpeed = 0.6;
 }
 
@@ -161,7 +172,7 @@ function flashButton(emo) {
   const btn = palette.querySelector(`[data-emo="${emo}"]`);
   if (!btn) return;
   btn.classList.add('flash');
-  setTimeout(() => btn.classList.remove('flash'), 140);
+  setTimeout(() => btn.classList.remove('flash'), 240);
 }
 
 // 팔레트 입력 배선 (마우스/터치 + 키보드는 InputController 내부)
@@ -207,6 +218,8 @@ function animate() {
   last = now;
 
   if (phase === 'live') {
+    // Render the live top ring every frame. Input feedback is not quantized to tick time.
+    sculpture.updateLiveRing(input.intensities, input.liveKind);
     acc += dt;
     elapsed += dt;
     while (acc >= TICK_MS) {
@@ -218,8 +231,11 @@ function animate() {
     if (elapsed >= SESSION_MS) endMatch();
   }
 
+  if (sculpture) sculpture.update(now / 1000);
   controls.update();
-  composer.render();
+  // The white gallery uses the direct renderer path. EffectComposer's transparent
+  // intermediate target can leave a stale black matte when the loft grows.
+  renderer.render(scene, camera);
 }
 animate();
 
@@ -270,10 +286,10 @@ function buildCompare() {
   seeds.forEach((s, i) => {
     const sc = new Sculpture(1000 + i);
     sc.setBeats(s.beats);
-    sc.mesh.position.x = i === 0 ? -gap : gap;
+    sc.group.position.x = i === 0 ? -gap : gap;
     // 상대팀 조각은 뒤집힌 서사 — 살짝 반대로 기울여 대비
-    if (i === 1) sc.mesh.rotation.y = Math.PI;
-    compareGroup.add(sc.mesh);
+    if (i === 1) sc.group.rotation.y = Math.PI;
+    compareGroup.add(sc.group);
     sc._userData = s;
   });
   scene.add(compareGroup);
@@ -281,7 +297,7 @@ function buildCompare() {
 
 $('#compare-btn').addEventListener('click', () => {
   resultEl.hidden = true;
-  if (sculpture) sculpture.mesh.visible = false;
+  if (sculpture) sculpture.group.visible = false;
   if (!compareGroup) buildCompare();
   compareGroup.visible = true;
   compareBar.hidden = false;
@@ -293,7 +309,7 @@ $('#compare-btn').addEventListener('click', () => {
 
 $('#compare-back').addEventListener('click', () => {
   if (compareGroup) compareGroup.visible = false;
-  if (sculpture) sculpture.mesh.visible = true;
+  if (sculpture) sculpture.group.visible = true;
   compareBar.hidden = true;
   resultEl.hidden = false;
   phase = 'result';
@@ -302,7 +318,7 @@ $('#compare-back').addEventListener('click', () => {
 
 $('#replay-btn').addEventListener('click', () => {
   if (sculpture) {
-    scene.remove(sculpture.mesh);
+    scene.remove(sculpture.group);
     sculpture.dispose();
   }
   resultEl.hidden = true;
@@ -310,8 +326,9 @@ $('#replay-btn').addEventListener('click', () => {
   phase = 'idle';
   startBtn.hidden = false;
   phaseTag.textContent = 'Before kickoff';
-  controls.target.set(0, 2, 0);
-  camera.position.set(0, 3, 12);
+  controls.target.set(0, 0.9, 0);
+  camera.position.set(0, 2.7, 11.8);
+  document.body.classList.remove('is-live');
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -322,7 +339,6 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // Space가 페이지 스크롤/버튼 클릭 트리거하지 않도록

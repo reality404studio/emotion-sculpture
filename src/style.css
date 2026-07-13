@@ -66,7 +66,8 @@ body::before {
   position: fixed;
   top: 68px;
   right: 28px;
-  width: 440px;
+  width: min(360px, calc(100vw - 56px));
+  max-width: 360px;
   z-index: 10;
   background: var(--glass);
   border: 1px solid rgba(150, 165, 230, 0.22);

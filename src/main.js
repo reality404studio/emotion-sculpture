@@ -36,17 +36,19 @@ const compareBar = $('#compare-bar');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.16;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.setClearColor(0xf8f9ff, 1);
+renderer.setClearColor(0xf4f3f1, 1);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf8f9ff);
-scene.fog = new THREE.FogExp2(0xf3f2ff, 0.014);
+scene.background = new THREE.Color(0xf4f3f1);
+scene.fog = new THREE.FogExp2(0xf1f0ee, 0.014);
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
-camera.position.set(0, 1.35, 8.2);
+camera.position.set(0, 1.2, 5.7);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -59,6 +61,8 @@ controls.target.set(0, 1.1, 0);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xdde5ff, 1.45));
 const key = new THREE.DirectionalLight(0xffffff, 2.1);
 key.position.set(5, 10, 7);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
 scene.add(key);
 const rim = new THREE.PointLight(0x8aa7ff, 2.3, 36);
 rim.position.set(-6, 5, -6);
@@ -70,10 +74,11 @@ scene.add(warm);
 // A quiet gallery floor: enough grounding to keep the sculpture from floating.
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(10, 96),
-  new THREE.MeshBasicMaterial({ color: 0xf2f1fb, transparent: true, opacity: 0.78 })
+  new THREE.MeshStandardMaterial({ color: 0xe9e7e3, roughness: 0.92, metalness: 0, transparent: true, opacity: 0.84 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.035;
+floor.receiveShadow = true;
 scene.add(floor);
 const halo = new THREE.Mesh(
   new THREE.CircleGeometry(3.3, 96),
@@ -125,8 +130,8 @@ function startMatch() {
   phaseTag.textContent = 'Live — pour your emotions';
   progressFill.style.width = '0%';
   document.body.classList.add('is-live');
-  controls.target.set(0, 1.1, 0);
-  camera.position.set(0, 1.35, 8.2);
+  controls.target.set(0, 0.92, 0);
+  camera.position.set(0, 1.2, 5.7);
   controls.autoRotateSpeed = 0.6;
 }
 
@@ -159,7 +164,7 @@ async function endMatch() {
 function revealCamera() {
   const h = sculpture.height;
   controls.target.set(0, h / 2, 0);
-  const dist = Math.max(7.8, h * 2.9 + 1.2);
+  const dist = Math.max(5.8, h * 1.85 + 1.2);
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
   camera.position.copy(controls.target).addScaledVector(dir, dist);
   controls.autoRotateSpeed = 1.0;
@@ -191,7 +196,7 @@ palette.querySelectorAll('.emo-btn').forEach((btn) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// tick: 강도 스냅샷 → 링 추가
+// tick: 강도 스냅샷 → 내부 재료 필드에 기록
 // ─────────────────────────────────────────────────────────────
 function tick() {
   const { e, kind } = input.tick();
@@ -212,7 +217,7 @@ function animate() {
   last = now;
 
   if (phase === 'live') {
-    // Render the live top ring every frame. Input feedback is not quantized to tick time.
+    // Material fields update every frame. Input feedback is not quantized to tick time.
     sculpture.updateLiveRing(input.intensities, input.liveKind);
     acc += dt;
     elapsed += dt;
@@ -296,7 +301,7 @@ $('#compare-btn').addEventListener('click', () => {
   compareGroup.visible = true;
   compareBar.hidden = false;
   phase = 'compare';
-  controls.target.set(0, 1.1, 0);
+  controls.target.set(0, 0.92, 0);
   camera.position.set(0, 1.45, 11.5);
   controls.autoRotateSpeed = 0.8;
 });
@@ -321,7 +326,7 @@ $('#replay-btn').addEventListener('click', () => {
   startBtn.hidden = false;
   phaseTag.textContent = 'Before kickoff';
   controls.target.set(0, 1.1, 0);
-  camera.position.set(0, 1.35, 8.2);
+  camera.position.set(0, 1.35, 5.2);
   document.body.classList.remove('is-live');
 });
 

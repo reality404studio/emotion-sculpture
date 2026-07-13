@@ -186,6 +186,7 @@ palette.querySelectorAll('.emo-btn').forEach((btn) => {
     btn.addEventListener('pointerdown', () => input && input.holdPleaseStart());
     btn.addEventListener('pointerup', () => input && input.holdPleaseEnd());
     btn.addEventListener('pointerleave', () => input && input.holdPleaseEnd());
+    btn.addEventListener('pointercancel', () => input && input.holdPleaseEnd());
   }
 });
 

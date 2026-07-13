@@ -19,7 +19,7 @@ const EMA_A = 0.28;
 const LIVE_A = 0.86;
 const TEX_AMP = 0.055;
 const MICRO_PULSE = 0.035;
-const CALM = new THREE.Color(0xbcc7f2);
+const CORE = new THREE.Color(0x6170b6);
 const IVORY = new THREE.Color(0xf8f7ff);
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -49,6 +49,8 @@ export class Sculpture {
     this._lastEma = [BASELINE, BASELINE, BASELINE];
     this._pulse = 0;
     this._pulseColor = new THREE.Color(0xffffff);
+    this._impulse = 0;
+    this._impulseEmotion = 0;
 
     this.geometry = new THREE.BufferGeometry();
     this.material = new THREE.MeshPhysicalMaterial({
@@ -84,7 +86,47 @@ export class Sculpture {
     this.group = new THREE.Group();
     this.group.add(this.mesh, this.aura);
     this.sparkles = this._createSparkles();
-    this.group.add(this.sparkles);
+    this.nerveGroup = new THREE.Group();
+    this.nerveLines = [];
+    this.nerveAuras = [];
+    this.nerveDots = [];
+    for (let i = 0; i < N_EMOTIONS; i++) {
+      const color = EMOTIONS[i].hex;
+      const line = new THREE.Line(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.84, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+      );
+      const aura = new THREE.Line(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+      );
+      this.nerveLines.push(line);
+      this.nerveAuras.push(aura);
+      this.nerveGroup.add(aura, line);
+
+      const dots = new THREE.Points(
+        new THREE.BufferGeometry(),
+        new THREE.PointsMaterial({ color, size: 0.065, transparent: true, opacity: 0.95, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending, sizeAttenuation: true })
+      );
+      this.nerveDots.push(dots);
+      this.nerveGroup.add(dots);
+    }
+
+    const pulseGeometry = new THREE.TorusGeometry(0.86, 0.018, 8, 96);
+    this.impulseRing = new THREE.Mesh(
+      pulseGeometry,
+      new THREE.MeshBasicMaterial({ color: EMOTIONS[0].hex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+    );
+    this.impulseGlow = new THREE.Mesh(
+      pulseGeometry,
+      new THREE.MeshBasicMaterial({ color: EMOTIONS[0].hex, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+    );
+    this.impulseRing.rotation.x = Math.PI / 2;
+    this.impulseGlow.rotation.x = Math.PI / 2;
+    this.impulseRing.visible = false;
+    this.impulseGlow.visible = false;
+
+    this.group.add(this.sparkles, this.nerveGroup, this.impulseGlow, this.impulseRing);
   }
 
   get height() {
@@ -115,10 +157,17 @@ export class Sculpture {
   }
 
   pulse(emotionIndex) {
-    this._pulse = Math.min(1.6, this._pulse + 0.78);
+    this._pulse = Math.min(1.8, this._pulse + 0.92);
+    this._impulse = Math.min(1.35, this._impulse + 1.0);
+    this._impulseEmotion = emotionIndex;
     this._pulseColor.copy(colorForEmotion(emotionIndex));
+    this.impulseRing.material.color.copy(this._pulseColor);
+    this.impulseGlow.material.color.copy(this._pulseColor);
+    this.impulseRing.visible = true;
+    this.impulseGlow.visible = true;
     // The upper ring is also updated here, so pointer feedback never waits for a tick.
-    this.liveE[emotionIndex] = Math.min(1, this.liveE[emotionIndex] + (emotionIndex === 1 ? 0.45 : 0.2));
+    this.liveE[emotionIndex] = Math.min(1, this.liveE[emotionIndex] + (emotionIndex === 1 ? 0.62 : 0.34));
+    if (this.live) this._rebuildNerves();
   }
 
   _createSparkles() {
@@ -161,7 +210,7 @@ export class Sculpture {
 
     for (let s = 0; s < SEG; s++) {
       const theta = (s / SEG) * Math.PI * 2;
-      let r = BASE_RADIUS + micro;
+      let r = BASE_RADIUS + micro + total * 0.045;
       let wSum = 0;
       let cr = 0;
       let cg = 0;
@@ -169,7 +218,18 @@ export class Sculpture {
       for (let i = 0; i < N_EMOTIONS; i++) {
         const d = wrapAngle(theta - emotionAngle(i));
         const l = lobe(EMOTIONS[i], d);
-        r += e[i] * EMOTIONS[i].lobeAmp * l;
+        if (i === 0) {
+          // Joy blooms outward, like a bright petal opening.
+          r += e[i] * 0.42 * l;
+        } else if (i === 1) {
+          // No is subtractive: a sharp red bite taken out of the core.
+          r -= e[i] * 0.58 * l;
+          r -= e[i] * 0.11 * Math.pow(l, 0.42);
+        } else {
+          // Please is a liquid pressure field: broad swell plus a travelling ripple.
+          r += e[i] * 0.27 * l;
+          r += e[i] * 0.075 * Math.sin(theta * 2.0 + ringIndex * 0.36) * l;
+        }
         const w = l + 1e-3;
         wSum += w;
         cr += w * EMOTIONS[i].rgb[0];
@@ -177,6 +237,7 @@ export class Sculpture {
         cb += w * EMOTIONS[i].rgb[2];
       }
       if (roughFactor > 0) r += TEX_AMP * roughFactor * textureNoise(this.seed, ringIndex, s);
+      r = Math.max(0.32, r);
 
       out.pos[s * 3] = r * Math.cos(theta);
       out.pos[s * 3 + 1] = y;
@@ -185,13 +246,13 @@ export class Sculpture {
       cr /= wSum;
       cg /= wSum;
       cb /= wSum;
-      // Quiet layers stay milky and calm; a reaction quickly hands the surface
-      // back to the actual emotion colors instead of washing everything white.
-      const calmMix = Math.max(0.1, 0.82 - total * 0.74);
-      cr = lerp(cr, CALM.r, calmMix);
-      cg = lerp(cg, CALM.g, calmMix);
-      cb = lerp(cb, CALM.b, calmMix);
-      const bright = 0.62 + 0.95 * total;
+      // The core is cool and translucent, while active layers keep their
+      // own emotion hue instead of becoming a single averaged pastel.
+      const coreMix = Math.max(0.08, 0.48 - total * 0.42);
+      cr = lerp(cr, CORE.r, coreMix);
+      cg = lerp(cg, CORE.g, coreMix);
+      cb = lerp(cb, CORE.b, coreMix);
+      const bright = 0.78 + 0.72 * total;
       out.col[s * 3] = Math.min(1.45, cr * bright);
       out.col[s * 3 + 1] = Math.min(1.45, cg * bright);
       out.col[s * 3 + 2] = Math.min(1.45, cb * bright);
@@ -279,6 +340,40 @@ export class Sculpture {
     this.geometry.computeVertexNormals();
     this.geometry.computeBoundingSphere();
     this.geometry.computeBoundingBox();
+    this._rebuildNerves();
+  }
+
+  _rebuildNerves() {
+    const layerCount = this.beats.length + (this.live ? 1 : 0);
+    for (let i = 0; i < N_EMOTIONS; i++) {
+      const points = [];
+      const dots = [];
+      const addPoint = (e, ringIndex) => {
+        const intensity = e[i];
+        const angle = emotionAngle(i) + Math.sin(ringIndex * 0.48 + i * 1.9) * 0.12;
+        const shape = i === 0 ? intensity * 0.42 : i === 1 ? -intensity * 0.42 : intensity * 0.26;
+        const radius = Math.max(0.42, BASE_RADIUS + shape + 0.1);
+        points.push(new THREE.Vector3(Math.cos(angle) * radius, ringIndex * LAYER_HEIGHT, Math.sin(angle) * radius));
+        if (intensity > 0.11) {
+          dots.push(new THREE.Vector3(Math.cos(angle) * (radius + 0.045), ringIndex * LAYER_HEIGHT, Math.sin(angle) * (radius + 0.045)));
+        }
+      };
+
+      addPoint([BASELINE, BASELINE, BASELINE], 0);
+      for (let ri = 0; ri < this.beats.length; ri++) addPoint(this.beats[ri].e, ri + 1);
+      if (this.live) addPoint(this.liveE, this.beats.length + 1);
+
+      const line = this.nerveLines[i];
+      const aura = this.nerveAuras[i];
+      const dotMesh = this.nerveDots[i];
+      line.geometry.dispose();
+      aura.geometry.dispose();
+      dotMesh.geometry.dispose();
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points.length > 1 ? points : [new THREE.Vector3(), new THREE.Vector3(0, LAYER_HEIGHT, 0)]);
+      line.geometry = lineGeometry;
+      aura.geometry = lineGeometry.clone();
+      dotMesh.geometry = new THREE.BufferGeometry().setFromPoints(dots);
+    }
   }
 
   updateLiveRing(liveE, kind = 'quiet') {
@@ -313,12 +408,34 @@ export class Sculpture {
 
   update(timeSec) {
     this._pulse *= 0.9;
+    this._impulse = Math.max(0, this._impulse - 0.055);
     this.auraMaterial.opacity = 0.08 + this._pulse * 0.055;
     this.mesh.scale.setScalar(1 + this._pulse * 0.012);
     this.aura.scale.setScalar(1.035 + this._pulse * 0.025);
     this.sparkleMaterial.opacity = 0.32 + this._pulse * 0.14;
     this.sparkles.scale.y = Math.max(0.2, this.height);
     this.sparkles.rotation.y = timeSec * 0.08;
+    this.nerveGroup.rotation.y = Math.sin(timeSec * 0.52) * 0.06;
+    this.nerveGroup.rotation.z = Math.sin(timeSec * 0.34) * 0.018;
+    this.nerveLines.forEach((line, i) => {
+      const shimmer = 0.62 + 0.22 * Math.sin(timeSec * (1.4 + i * 0.2) + i);
+      line.material.opacity = shimmer + this._pulse * 0.12;
+      this.nerveAuras[i].material.opacity = 0.1 + this._pulse * 0.05;
+      this.nerveDots[i].material.opacity = 0.68 + this._pulse * 0.18;
+    });
+
+    const pulseVisible = this._impulse > 0.01;
+    this.impulseRing.visible = pulseVisible;
+    this.impulseGlow.visible = pulseVisible;
+    if (pulseVisible) {
+      const wave = 0.82 + (1.35 - this._impulse) * 1.45;
+      this.impulseRing.position.y = this.height + 0.055;
+      this.impulseGlow.position.y = this.height + 0.055;
+      this.impulseRing.scale.set(wave, wave, wave);
+      this.impulseGlow.scale.set(wave * 1.08, wave * 1.08, wave * 1.08);
+      this.impulseRing.material.opacity = this._impulse * 0.88;
+      this.impulseGlow.material.opacity = this._impulse * 0.22;
+    }
   }
 
   dispose() {
@@ -327,6 +444,12 @@ export class Sculpture {
     this.auraMaterial.dispose();
     this.sparkles.geometry.dispose();
     this.sparkleMaterial.dispose();
+    this.nerveLines.forEach((line) => { line.geometry.dispose(); line.material.dispose(); });
+    this.nerveAuras.forEach((line) => { line.geometry.dispose(); line.material.dispose(); });
+    this.nerveDots.forEach((dots) => { dots.geometry.dispose(); dots.material.dispose(); });
+    this.impulseRing.geometry.dispose();
+    this.impulseRing.material.dispose();
+    this.impulseGlow.material.dispose();
   }
 }
 

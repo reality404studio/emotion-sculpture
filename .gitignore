@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.vite/
+# devnet 데모용 키페어를 파일로 저장하게 되면 여기에 (현재는 세션당 메모리 생성)
+*.keypair.json
+.env
+.env.*

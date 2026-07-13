@@ -1,0 +1,290 @@
+/* 미니멀 · 다크 배경 — 오브제가 주인공 (§3, §71) */
+:root {
+  --gold: #f59e0b;
+  --red: #ef4444;
+  --blue: #3b82f6;
+  --ink: #e8eaed;
+  --dim: #8b93a1;
+  --panel: rgba(14, 18, 26, 0.82);
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #05070c;
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR',
+    system-ui, sans-serif;
+  user-select: none;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ── 상단 바 ── */
+#topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 20px 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+#topbar .match {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+#match-label {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+#phase-tag {
+  font-size: 12px;
+  color: var(--dim);
+}
+#progress {
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+#progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--blue), var(--gold));
+  transition: width 0.2s linear;
+}
+
+/* ── 하이라이트 영상 ── */
+#video-panel {
+  position: fixed;
+  top: 58px;
+  right: 20px;
+  width: 300px;
+  z-index: 10;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 8px;
+  backdrop-filter: blur(8px);
+}
+.video-wrap {
+  position: relative;
+  padding-bottom: 56.25%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.video-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.video-note {
+  margin: 8px 4px 2px;
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.4;
+}
+
+/* ── 시작/종료 ── */
+#controls {
+  position: fixed;
+  bottom: 128px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 11;
+  display: flex;
+  gap: 10px;
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  padding: 12px 20px;
+  transition: transform 0.08s ease, background 0.2s, box-shadow 0.2s;
+}
+button:active {
+  transform: scale(0.97);
+}
+.primary {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 6px 24px rgba(80, 60, 200, 0.35);
+}
+.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── 감정 팔레트 ── */
+#palette {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  display: flex;
+  gap: 22px;
+}
+.emo-btn {
+  width: 150px;
+  height: 84px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--c) 16%, #0a0e16);
+  border: 2px solid color-mix(in srgb, var(--c) 55%, transparent);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: box-shadow 0.12s, transform 0.08s, background 0.15s;
+}
+.emo-btn .emo-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--c);
+}
+.emo-btn .emo-hint {
+  font-size: 12px;
+  color: var(--dim);
+}
+.emo-btn.flash {
+  background: color-mix(in srgb, var(--c) 42%, #0a0e16);
+  box-shadow: 0 0 34px color-mix(in srgb, var(--c) 70%, transparent);
+  transform: translateY(-3px);
+}
+
+/* ── 결과 / 박제 ── */
+#result {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: 6vw;
+  pointer-events: none;
+}
+.result-card {
+  pointer-events: auto;
+  width: 380px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 26px 26px 22px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.result-card h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.tagline {
+  margin: 0 0 18px;
+  color: var(--gold);
+  font-size: 14px;
+  font-style: italic;
+}
+.result-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.result-meta > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--dim);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 6px;
+}
+.result-meta b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+.mint-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chain-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.mint-status {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--blue);
+  min-height: 16px;
+}
+.mint-result {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.mint-result a {
+  color: var(--gold);
+  word-break: break-all;
+}
+.result-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+}
+.result-actions .ghost {
+  flex: 1;
+  padding: 10px;
+  font-size: 13px;
+}
+
+/* ── 비교 바 ── */
+#compare-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: linear-gradient(180deg, rgba(5, 7, 12, 0.9), transparent);
+  font-size: 14px;
+}
+
+[hidden] {
+  display: none !important;
+}

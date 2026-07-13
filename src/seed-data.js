@@ -50,7 +50,7 @@ const RIVAL_EVENTS = [
 
 export function seedSessions() {
   return [
-    { id: 'seed-home', matchLabel: 'France vs Spain (SF)', side: 'FRA', label: '내 조각', beats: synth(HOME_EVENTS) },
-    { id: 'seed-rival', matchLabel: 'France vs Spain (SF)', side: 'ESP', label: '상대팀 팬', beats: synth(RIVAL_EVENTS) },
+    { id: 'seed-home', matchLabel: 'France vs Spain (SF)', side: 'FRA', label: 'Your sculpture', beats: synth(HOME_EVENTS) },
+    { id: 'seed-rival', matchLabel: 'France vs Spain (SF)', side: 'ESP', label: 'Rival fan', beats: synth(RIVAL_EVENTS) },
   ];
 }

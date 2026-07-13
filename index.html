@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>감정 조각 · Emotion Sculpture</title>
+    <title>Emotion Sculpture</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -14,7 +14,7 @@
     <header id="topbar">
       <div class="match">
         <span id="match-label">France vs Spain (SF)</span>
-        <span id="phase-tag">경기 시작 전</span>
+        <span id="phase-tag">Before kickoff</span>
       </div>
       <div id="progress"><div id="progress-fill"></div></div>
     </header>
@@ -31,45 +31,45 @@
           allowfullscreen
         ></iframe>
       </div>
-      <p class="video-note">하이라이트를 틀고 아래 세 감정을 반사로 누르세요.</p>
+      <p class="video-note">Play a highlight and hit the three emotions on reflex.</p>
     </div>
 
     <!-- 시작/종료 컨트롤 -->
     <div id="controls">
-      <button id="start-btn" class="primary">▶ 경기 시작 (조각 만들기)</button>
-      <button id="end-btn" class="ghost" hidden>■ 끝내기 → 박제</button>
+      <button id="start-btn" class="primary">▶ Start match (grow the sculpture)</button>
+      <button id="end-btn" class="ghost" hidden>■ Finish → Mint</button>
     </div>
 
     <!-- 감정 입력 팔레트 (§6) — 크고 멀찍이 -->
     <div id="palette" hidden>
       <button class="emo-btn" data-emo="0" style="--c: #f59e0b">
-        <span class="emo-label">좋아!</span>
-        <span class="emo-hint">연타 · J</span>
+        <span class="emo-label">YES!</span>
+        <span class="emo-hint">rapid tap · J</span>
       </button>
       <button class="emo-btn" data-emo="1" style="--c: #ef4444">
-        <span class="emo-label">안돼!</span>
-        <span class="emo-hint">탭 · F</span>
+        <span class="emo-label">NO!</span>
+        <span class="emo-hint">tap · F</span>
       </button>
       <button class="emo-btn" data-emo="2" style="--c: #3b82f6">
-        <span class="emo-label">제발!</span>
-        <span class="emo-hint">길게 · Space</span>
+        <span class="emo-label">PLEASE!</span>
+        <span class="emo-hint">hold · Space</span>
       </button>
     </div>
 
     <!-- 결과 / 박제 화면 (§10) -->
     <div id="result" hidden>
       <div class="result-card">
-        <h1>완성된 조각</h1>
-        <p class="tagline">이게 내가 그날 그 경기를 산 방식.</p>
+        <h1>Your finished sculpture</h1>
+        <p class="tagline">This is how I lived that match.</p>
         <div class="result-meta">
-          <div><span>비트</span><b id="r-beats">–</b></div>
+          <div><span>beats</span><b id="r-beats">–</b></div>
           <div><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
         </div>
 
         <div class="mint-row">
           <label class="chain-toggle">
             <input type="checkbox" id="use-devnet" />
-            <span>실제 devnet에 커밋 (Solana Memo)</span>
+            <span>Commit to real devnet (Solana Memo)</span>
           </label>
           <button id="mint-btn" class="primary">Mint your memory</button>
         </div>
@@ -80,16 +80,16 @@
         </div>
 
         <div class="result-actions">
-          <button id="compare-btn" class="ghost">같은 경기, 다른 형상 →</button>
-          <button id="replay-btn" class="ghost">다시</button>
+          <button id="compare-btn" class="ghost">Same match, different shape →</button>
+          <button id="replay-btn" class="ghost">Again</button>
         </div>
       </div>
     </div>
 
     <!-- 비교 뷰 배지 -->
     <div id="compare-bar" hidden>
-      <span>같은 3분, 뒤집힌 형상 — 왼쪽: 내 조각 · 오른쪽: 상대팀 팬</span>
-      <button id="compare-back" class="ghost">← 돌아가기</button>
+      <span>Same 3 minutes, inverted shape — left: your sculpture · right: rival fan</span>
+      <button id="compare-back" class="ghost">← Back</button>
     </div>
 
     <script type="module" src="/src/main.js"></script>

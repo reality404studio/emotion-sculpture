@@ -8,8 +8,8 @@
 export const EMOTIONS = [
   {
     key: 'yes',
-    label: '좋아!',
-    hint: '연타',
+    label: 'YES!',
+    hint: 'rapid tap',
     input: 'tap',
     hex: 0xf59e0b, // 금빛
     rgb: [0.96, 0.62, 0.04],
@@ -21,8 +21,8 @@ export const EMOTIONS = [
   },
   {
     key: 'no',
-    label: '안돼!',
-    hint: '탭',
+    label: 'NO!',
+    hint: 'tap',
     input: 'single',
     hex: 0xef4444, // 빨강
     rgb: [0.94, 0.27, 0.27],
@@ -34,8 +34,8 @@ export const EMOTIONS = [
   },
   {
     key: 'please',
-    label: '제발!',
-    hint: '길게 누르기',
+    label: 'PLEASE!',
+    hint: 'hold',
     input: 'hold',
     hex: 0x3b82f6, // 차가운 파랑
     rgb: [0.23, 0.51, 0.96],

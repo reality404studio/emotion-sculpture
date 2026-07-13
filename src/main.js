@@ -115,7 +115,7 @@ function startMatch() {
   endBtn.hidden = false;
   palette.hidden = false;
   resultEl.hidden = true;
-  phaseTag.textContent = '진행 중 — 감정을 흘려보내세요';
+  phaseTag.textContent = 'Live — pour your emotions';
   controls.autoRotateSpeed = 0.6;
 }
 
@@ -133,7 +133,7 @@ async function endMatch() {
 
   endBtn.hidden = true;
   palette.hidden = true;
-  phaseTag.textContent = '완성 — 조각을 돌려보세요';
+  phaseTag.textContent = 'Done — rotate your sculpture';
 
   $('#r-beats').textContent = String(session.beats.length);
   $('#r-hash').textContent = session.signatureHash.slice(0, 24) + '…';
@@ -236,25 +236,25 @@ $('#mint-btn').addEventListener('click', async () => {
   const adapter = makeAdapter(useDevnet ? 'devnet' : 'mock');
   if (adapter.onStatus !== undefined) adapter.onStatus = (m) => (statusEl.textContent = m);
 
-  statusEl.textContent = useDevnet ? 'devnet 커밋 준비…' : 'mock 커밋…';
+  statusEl.textContent = useDevnet ? 'Preparing devnet commit…' : 'Mock commit…';
   try {
     const res = await adapter.commitSculpture(session);
     resultBox.hidden = false;
     const box = resultBox.querySelector('.explorer');
     if (res.explorerUrl) {
-      statusEl.textContent = '✓ devnet에 실제로 박혔습니다.';
-      box.innerHTML = `이 조각이 이 시각에 온체인에 박혔습니다.<br/>
-        <a href="${res.explorerUrl}" target="_blank" rel="noopener">Solana Explorer에서 보기 ↗</a>
+      statusEl.textContent = '✓ Committed on devnet for real.';
+      box.innerHTML = `This sculpture was written on-chain at this moment.<br/>
+        <a href="${res.explorerUrl}" target="_blank" rel="noopener">View on Solana Explorer ↗</a>
         <br/><small class="mono">acct ${res.account}</small>`;
     } else {
-      statusEl.textContent = '✓ mock 커밋 완료 (오프라인). 실연동은 체크박스로.';
+      statusEl.textContent = '✓ Mock commit done (offline). Toggle the checkbox for a real one.';
       box.innerHTML = `<small class="mono">sig ${res.signature}</small><br/>
-        <small style="color:var(--dim)">"실제 devnet에 커밋"을 켜면 explorer 링크가 생깁니다.</small>`;
+        <small style="color:var(--dim)">Enable "Commit to real devnet" to get an explorer link.</small>`;
     }
   } catch (err) {
     console.error(err);
-    statusEl.textContent = '✗ 커밋 실패: ' + (err && err.message ? err.message : err) +
-      ' (devnet 에어드랍 제한일 수 있음 — 잠시 후 재시도)';
+    statusEl.textContent = '✗ Commit failed: ' + (err && err.message ? err.message : err) +
+      ' (devnet airdrop may be rate-limited — retry shortly)';
   } finally {
     mintBtn.disabled = false;
   }
@@ -309,7 +309,7 @@ $('#replay-btn').addEventListener('click', () => {
   progressFill.style.width = '0%';
   phase = 'idle';
   startBtn.hidden = false;
-  phaseTag.textContent = '경기 시작 전';
+  phaseTag.textContent = 'Before kickoff';
   controls.target.set(0, 2, 0);
   camera.position.set(0, 3, 12);
 });

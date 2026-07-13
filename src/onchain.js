@@ -29,7 +29,7 @@ async function buildMemo(session) {
 // ── Layer A: Mock ───────────────────────────────────────────────
 export class MockAdapter {
   get label() {
-    return 'Mock (오프라인)';
+    return 'Mock (offline)';
   }
   async commitSculpture(session) {
     const memo = await buildMemo(session);
@@ -58,7 +58,7 @@ export class DevnetMemoAdapter {
     this.onStatus = () => {};
   }
   get label() {
-    return 'Solana devnet (실커밋)';
+    return 'Solana devnet (real commit)';
   }
 
   async _load() {
@@ -70,7 +70,7 @@ export class DevnetMemoAdapter {
     const web3 = await this._load();
     const bal = await connection.getBalance(keypair.publicKey);
     if (bal >= 1_000_000) return; // 충분(≈0.001 SOL)
-    this.onStatus('devnet 에어드랍 요청 중…');
+    this.onStatus('Requesting devnet airdrop…');
     const sig = await connection.requestAirdrop(keypair.publicKey, web3.LAMPORTS_PER_SOL / 5);
     const latest = await connection.getLatestBlockhash();
     await connection.confirmTransaction(
@@ -88,11 +88,11 @@ export class DevnetMemoAdapter {
     if (!this._keypair) this._keypair = Keypair.generate();
     const payer = this._keypair;
 
-    this.onStatus('devnet 연결…');
+    this.onStatus('Connecting to devnet…');
     await this._ensureFunded(connection, payer);
 
     const memo = await buildMemo(session);
-    this.onStatus('Memo 트랜잭션 서명·전송…');
+    this.onStatus('Signing & sending Memo transaction…');
 
     const ix = new TransactionInstruction({
       keys: [{ pubkey: payer.publicKey, isSigner: true, isWritable: true }],
@@ -110,7 +110,7 @@ export class DevnetMemoAdapter {
     });
 
     const explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-    this.onStatus('커밋 완료');
+    this.onStatus('Commit complete');
     return { signature, explorerUrl, memo, mock: false, account: payer.publicKey.toBase58() };
   }
 }

@@ -46,14 +46,14 @@ scene.background = new THREE.Color(0xf8f9ff);
 scene.fog = new THREE.FogExp2(0xf3f2ff, 0.014);
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
-camera.position.set(0, 4.7, 13.5);
+camera.position.set(0, 1.35, 8.2);
 
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.autoRotate = true;
 controls.autoRotateSpeed = 0.6;
-controls.target.set(0, 3.2, 0);
+controls.target.set(0, 1.1, 0);
 
 // 은은한 조명 1~2개 (§5.4)
 scene.add(new THREE.HemisphereLight(0xffffff, 0xdde5ff, 1.45));
@@ -125,8 +125,8 @@ function startMatch() {
   phaseTag.textContent = 'Live — pour your emotions';
   progressFill.style.width = '0%';
   document.body.classList.add('is-live');
-  controls.target.set(0, 0.9, 0);
-  camera.position.set(0, 2.7, 11.8);
+  controls.target.set(0, 1.1, 0);
+  camera.position.set(0, 1.35, 8.2);
   controls.autoRotateSpeed = 0.6;
 }
 
@@ -159,7 +159,7 @@ async function endMatch() {
 function revealCamera() {
   const h = sculpture.height;
   controls.target.set(0, h / 2, 0);
-  const dist = Math.max(10, h * 0.9 + 6);
+  const dist = Math.max(7.8, h * 2.9 + 1.2);
   const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
   camera.position.copy(controls.target).addScaledVector(dir, dist);
   controls.autoRotateSpeed = 1.0;
@@ -199,14 +199,7 @@ function tick() {
   session.beats.push(beat);
   sculpture.addBeat(beat);
 
-  // 성장 중 카메라가 천천히 상승하며 새 켜를 따라간다 (§5.5)
-  const h = sculpture.height;
-  controls.target.y += (h / 2 - controls.target.y) * 0.08;
-  const desired = Math.max(9, h * 0.75 + 5);
-  const dir = new THREE.Vector3().subVectors(camera.position, controls.target);
-  const cur = dir.length();
-  dir.normalize();
-  camera.position.copy(controls.target).addScaledVector(dir, cur + (desired - cur) * 0.05);
+  // The object stays in a compact gallery frame; time is recorded inside the rock.
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -283,7 +276,7 @@ $('#mint-btn').addEventListener('click', async () => {
 function buildCompare() {
   compareGroup = new THREE.Group();
   const seeds = seedSessions();
-  const gap = 6;
+  const gap = 3.5;
   seeds.forEach((s, i) => {
     const sc = new Sculpture(1000 + i);
     sc.setBeats(s.beats);
@@ -303,8 +296,8 @@ $('#compare-btn').addEventListener('click', () => {
   compareGroup.visible = true;
   compareBar.hidden = false;
   phase = 'compare';
-  controls.target.set(0, 4, 0);
-  camera.position.set(0, 5, 20);
+  controls.target.set(0, 1.1, 0);
+  camera.position.set(0, 1.45, 11.5);
   controls.autoRotateSpeed = 0.8;
 });
 
@@ -327,8 +320,8 @@ $('#replay-btn').addEventListener('click', () => {
   phase = 'idle';
   startBtn.hidden = false;
   phaseTag.textContent = 'Before kickoff';
-  controls.target.set(0, 0.9, 0);
-  camera.position.set(0, 2.7, 11.8);
+  controls.target.set(0, 1.1, 0);
+  camera.position.set(0, 1.35, 8.2);
   document.body.classList.remove('is-live');
 });
 

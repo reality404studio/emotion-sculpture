@@ -13,8 +13,9 @@ import {
 import { textureNoise } from './noise.js';
 
 const SEG = 128;
-const BASE_RADIUS = 0.82;
-const LAYER_HEIGHT = 0.075;
+const BASE_RADIUS = 1.12;
+const ROCK_HEIGHT = 2.25;
+const LAYER_HEIGHT = ROCK_HEIGHT / 30;
 const EMA_A = 0.28;
 const LIVE_A = 0.86;
 const TEX_AMP = 0.055;
@@ -51,6 +52,7 @@ export class Sculpture {
     this._pulseColor = new THREE.Color(0xffffff);
     this._impulse = 0;
     this._impulseEmotion = 0;
+    this._liveRingOffset = -1;
 
     this.geometry = new THREE.BufferGeometry();
     this.material = new THREE.MeshPhysicalMaterial({
@@ -90,16 +92,18 @@ export class Sculpture {
     this.nerveLines = [];
     this.nerveAuras = [];
     this.nerveDots = [];
+    this.nerveStrengths = [];
     for (let i = 0; i < N_EMOTIONS; i++) {
       const color = EMOTIONS[i].hex;
-      const line = new THREE.Line(
+      const line = new THREE.Mesh(
         new THREE.BufferGeometry(),
-        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.84, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.84, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.NormalBlending, side: THREE.DoubleSide })
       );
-      const aura = new THREE.Line(
+      const aura = new THREE.Mesh(
         new THREE.BufferGeometry(),
-        new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, toneMapped: false, blending: THREE.NormalBlending })
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, depthTest: false, toneMapped: false, blending: THREE.NormalBlending, side: THREE.DoubleSide })
       );
+      aura.scale.set(1.18, 1, 1.18);
       this.nerveLines.push(line);
       this.nerveAuras.push(aura);
       this.nerveGroup.add(aura, line);
@@ -130,7 +134,7 @@ export class Sculpture {
   }
 
   get height() {
-    return Math.max(LAYER_HEIGHT, (this.beats.length + 1) * LAYER_HEIGHT);
+    return ROCK_HEIGHT;
   }
 
   beginLive() {
@@ -210,7 +214,14 @@ export class Sculpture {
 
     for (let s = 0; s < SEG; s++) {
       const theta = (s / SEG) * Math.PI * 2;
-      let r = BASE_RADIUS + micro + total * 0.045;
+      const heightT = Math.max(0, Math.min(1, y / ROCK_HEIGHT));
+      const bodyEnvelope = 0.60 + 0.40 * Math.sin(Math.PI * heightT);
+      const slowRock =
+        1 +
+        0.10 * Math.sin(theta + heightT * 2.8 + this.seed * 0.00001) +
+        0.065 * Math.sin(theta * 2.0 - heightT * 4.0) +
+        0.035 * Math.sin(theta * 5.0 - ringIndex * 0.11);
+      let r = BASE_RADIUS * bodyEnvelope * slowRock + micro + total * 0.045;
       let wSum = 0;
       let cr = 0;
       let cg = 0;
@@ -263,7 +274,15 @@ export class Sculpture {
   rebuild() {
     const nBeats = this.beats.length;
     const rings = [];
-    if (nBeats > 0 || this.live) {
+    const previewCount = nBeats === 0 && this.live ? 12 : 0;
+    this._liveRingOffset = -1;
+
+    if (previewCount > 0) {
+      for (let ri = 0; ri < previewCount; ri++) {
+        rings.push({ e: [BASELINE, BASELINE, BASELINE], y: (ri / (previewCount - 1)) * ROCK_HEIGHT, index: ri, kind: 'quiet' });
+      }
+      this._liveRingOffset = previewCount;
+    } else if (nBeats > 0 || this.live) {
       rings.push({ e: [BASELINE, BASELINE, BASELINE], y: 0, index: 0, kind: 'quiet' });
     }
 
@@ -271,7 +290,8 @@ export class Sculpture {
     for (let ri = 0; ri < nBeats; ri++) {
       const beat = this.beats[ri];
       for (let i = 0; i < N_EMOTIONS; i++) ema[i] = lerp(ema[i], beat.e[i], EMA_A);
-      rings.push({ e: ema.slice(), y: (ri + 1) * LAYER_HEIGHT, index: ri + 1, kind: beat.kind });
+      const y = ((ri + 1) / Math.max(1, nBeats + 1)) * ROCK_HEIGHT;
+      rings.push({ e: ema.slice(), y, index: ri + 1, kind: beat.kind });
     }
     this._lastEma = ema.slice();
 
@@ -281,7 +301,9 @@ export class Sculpture {
         lerp(this._lastEma[1], this.liveE[1], LIVE_A),
         lerp(this._lastEma[2], this.liveE[2], LIVE_A),
       ];
-      rings.push({ e: liveRE, y: (nBeats + 1) * LAYER_HEIGHT, index: nBeats + 1, kind: this._liveKind });
+      const liveIndex = previewCount > 0 ? previewCount : nBeats + 1;
+      this._liveRingOffset = liveIndex;
+      rings.push({ e: liveRE, y: ROCK_HEIGHT, index: liveIndex, kind: this._liveKind });
     }
 
     if (rings.length < 2) {
@@ -344,18 +366,24 @@ export class Sculpture {
   }
 
   _rebuildNerves() {
-    const layerCount = this.beats.length + (this.live ? 1 : 0);
+    const totalLevels = Math.max(1, this.beats.length + 1);
     for (let i = 0; i < N_EMOTIONS; i++) {
       const points = [];
       const dots = [];
+      let peak = BASELINE;
       const addPoint = (e, ringIndex) => {
         const intensity = e[i];
-        const angle = emotionAngle(i) + Math.sin(ringIndex * 0.48 + i * 1.9) * 0.12;
-        const shape = i === 0 ? intensity * 0.42 : i === 1 ? -intensity * 0.42 : intensity * 0.26;
-        const radius = Math.max(0.42, BASE_RADIUS + shape + 0.1);
-        points.push(new THREE.Vector3(Math.cos(angle) * radius, ringIndex * LAYER_HEIGHT, Math.sin(angle) * radius));
+        peak = Math.max(peak, intensity);
+        const angle =
+          emotionAngle(i) +
+          ringIndex * (0.3 + i * 0.055) +
+          Math.sin(ringIndex * 0.62 + i * 1.9) * 0.42;
+        const shape = i === 0 ? intensity * 0.12 : i === 1 ? -intensity * 0.16 : intensity * 0.08;
+        const radius = Math.max(0.42, BASE_RADIUS * (0.72 + intensity * 0.13) + shape);
+        const y = (ringIndex / totalLevels) * ROCK_HEIGHT;
+        points.push(new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius));
         if (intensity > 0.11) {
-          dots.push(new THREE.Vector3(Math.cos(angle) * (radius + 0.045), ringIndex * LAYER_HEIGHT, Math.sin(angle) * (radius + 0.045)));
+          dots.push(new THREE.Vector3(Math.cos(angle) * (radius + 0.045), y, Math.sin(angle) * (radius + 0.045)));
         }
       };
 
@@ -369,10 +397,25 @@ export class Sculpture {
       line.geometry.dispose();
       aura.geometry.dispose();
       dotMesh.geometry.dispose();
-      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points.length > 1 ? points : [new THREE.Vector3(), new THREE.Vector3(0, LAYER_HEIGHT, 0)]);
-      line.geometry = lineGeometry;
-      aura.geometry = lineGeometry.clone();
+      const safePoints = points.length > 1 ? points : [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, ROCK_HEIGHT, 0)];
+      const curve = new THREE.CatmullRomCurve3(safePoints, false, 'centripetal', 0.4);
+      const tube = new THREE.TubeGeometry(curve, Math.max(12, safePoints.length * 2), i === 1 ? 0.022 : 0.032, 8, false);
+      const tubePositions = tube.getAttribute('position');
+      for (let vi = 0; vi < tubePositions.count; vi++) {
+        tubePositions.setY(vi, Math.max(0, Math.min(ROCK_HEIGHT, tubePositions.getY(vi))));
+      }
+      tubePositions.needsUpdate = true;
+      tube.computeBoundingSphere();
+      line.geometry = tube;
+      aura.geometry = tube.clone();
       dotMesh.geometry = new THREE.BufferGeometry().setFromPoints(dots);
+      const strength = Math.max(0, peak - BASELINE) / (1 - BASELINE);
+      this.nerveStrengths[i] = strength;
+      line.visible = strength > 0.06;
+      aura.visible = strength > 0.06;
+      dotMesh.visible = dots.length > 0;
+      line.material.opacity = 0.16 + Math.min(1, strength * 1.25) * 0.5;
+      aura.material.opacity = 0.04 + Math.min(1, strength * 1.25) * 0.11;
     }
   }
 
@@ -380,11 +423,10 @@ export class Sculpture {
     if (!this.live) return;
     this.liveE = liveE.slice();
     this._liveKind = kind;
-    const nBeats = this.beats.length;
     const posAttr = this.geometry.getAttribute('position');
     const colAttr = this.geometry.getAttribute('color');
     const enAttr = this.geometry.getAttribute('aEnergy');
-    if (!posAttr || !colAttr || !enAttr) return;
+    if (!posAttr || !colAttr || !enAttr || this._liveRingOffset < 0) return;
 
     const liveRE = [
       lerp(this._lastEma[0], liveE[0], LIVE_A),
@@ -396,8 +438,8 @@ export class Sculpture {
       col: new Float32Array(SEG * 3),
       energy: new Float32Array(SEG),
     };
-    this._ringVertices(liveRE, (nBeats + 1) * LAYER_HEIGHT, nBeats + 1, kind, scratch);
-    const offset = (nBeats + 1) * SEG;
+    this._ringVertices(liveRE, ROCK_HEIGHT, this._liveRingOffset, kind, scratch);
+    const offset = this._liveRingOffset * SEG;
     posAttr.array.set(scratch.pos, offset * 3);
     colAttr.array.set(scratch.col, offset * 3);
     enAttr.array.set(scratch.energy, offset);
@@ -413,14 +455,17 @@ export class Sculpture {
     this.mesh.scale.setScalar(1 + this._pulse * 0.012);
     this.aura.scale.setScalar(1.035 + this._pulse * 0.025);
     this.sparkleMaterial.opacity = 0.32 + this._pulse * 0.14;
-    this.sparkles.scale.y = Math.max(0.2, this.height);
+    this.sparkles.scale.y = Math.max(0.2, this.height / 1.2);
     this.sparkles.rotation.y = timeSec * 0.08;
     this.nerveGroup.rotation.y = Math.sin(timeSec * 0.52) * 0.06;
     this.nerveGroup.rotation.z = Math.sin(timeSec * 0.34) * 0.018;
     this.nerveLines.forEach((line, i) => {
+      const strength = this.nerveStrengths[i] || 0;
       const shimmer = 0.62 + 0.22 * Math.sin(timeSec * (1.4 + i * 0.2) + i);
-      line.material.opacity = shimmer + this._pulse * 0.12;
-      this.nerveAuras[i].material.opacity = 0.1 + this._pulse * 0.05;
+      line.visible = strength > 0.06;
+      this.nerveAuras[i].visible = strength > 0.06;
+      line.material.opacity = (0.14 + strength * 0.55) * shimmer + this._pulse * 0.08;
+      this.nerveAuras[i].material.opacity = 0.03 + strength * 0.11 + this._pulse * 0.04;
       this.nerveDots[i].material.opacity = 0.68 + this._pulse * 0.18;
     });
 

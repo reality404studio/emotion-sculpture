@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
-const AMBIENT_COUNT = 1000;
+const AMBIENT_COUNT = 1400;
 const BEAM_COUNT = 750;
 const RESIDUE_COUNT = 500;
-const TOTAL = AMBIENT_COUNT + BEAM_COUNT + RESIDUE_COUNT;
+const HAZE_COUNT = 260;
+const TOTAL = AMBIENT_COUNT + BEAM_COUNT + RESIDUE_COUNT + HAZE_COUNT;
 
 function makeRandom(seed = 0x46554e44) {
   let state = seed >>> 0;
@@ -44,9 +45,10 @@ const VERTEX = /* glsl */ `
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = clamp(aSize * uPixelRatio * (8.0 / -mv.z), 0.8, 9.0);
+    float maxPointSize = aLayer > 2.5 ? 32.0 : 9.0;
+    gl_PointSize = clamp(aSize * uPixelRatio * (8.0 / -mv.z), 0.8, maxPointSize);
 
-    float baseAlpha = aLayer < 0.5 ? 0.055 : aLayer < 1.5 ? 0.15 : 0.08;
+    float baseAlpha = aLayer < 0.5 ? 0.095 : aLayer < 1.5 ? 0.12 : aLayer < 2.5 ? 0.08 : 0.052;
     float breathing = 0.82 + 0.18 * sin(uTime * 0.38 + aPhase * 3.1);
     float distanceFade = smoothstep(0.25, 2.4, -mv.z) * (1.0 - smoothstep(13.0, 20.0, -mv.z));
     vAlpha = baseAlpha * breathing * distanceFade;
@@ -78,6 +80,8 @@ export class FoundryAtmosphere {
     const ambientColor = new THREE.Color(0x77746d);
     const beamColor = new THREE.Color(0xc8c1af);
     const residueColor = new THREE.Color(0x65709a);
+    const hazeIvory = new THREE.Color(0x9b9588);
+    const hazeBlue = new THREE.Color(0x596487);
 
     const write = (i, x, y, z, layer, size, drift, color) => {
       positions.set([x, y, z], i * 3);
@@ -91,9 +95,9 @@ export class FoundryAtmosphere {
     let cursor = 0;
     // 전역층: 카메라가 움직일 때 가까운 입자가 조금 더 빨리 지나가 깊이를 만든다.
     for (let i = 0; i < AMBIENT_COUNT; i++, cursor++) {
-      const x = (random() * 2 - 1) * 5.7;
-      const y = 0.12 + random() * 6.2;
-      const z = -4.8 + random() * 9.2;
+      const x = (random() * 2 - 1) * 8.2;
+      const y = 0.05 + random() * 7.1;
+      const z = -5.2 + random() * 11.6;
       write(cursor, x, y, z, 0, 4.5 + random() * 6.0, 0.025 + random() * 0.065, ambientColor);
     }
 
@@ -115,6 +119,16 @@ export class FoundryAtmosphere {
       const y = 0.04 + Math.pow(random(), 2.1) * 1.35;
       const z = Math.sin(angle) * radius;
       write(cursor, x, y, z, 2, 5.2 + random() * 7.0, 0.012 + random() * 0.035, residueColor);
+    }
+
+    // 전경 아지랑이: 큰 입자를 초점 밖에 두어 화면 전체가 고르게 숨 쉬게 한다.
+    // 작은 별처럼 보이지 않도록 매우 낮은 알파와 넓은 소프트 폴오프만 사용한다.
+    for (let i = 0; i < HAZE_COUNT; i++, cursor++) {
+      const x = (random() * 2 - 1) * 8.8;
+      const y = -0.2 + random() * 7.8;
+      const z = -1.0 + random() * 7.2;
+      const color = random() > 0.42 ? hazeIvory : hazeBlue;
+      write(cursor, x, y, z, 3, 18 + random() * 30, 0.08 + random() * 0.16, color);
     }
 
     this.geometry = new THREE.BufferGeometry();

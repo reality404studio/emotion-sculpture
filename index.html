@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Emotion Trophy — Feel it. Cast it.</title>
+    <title>Emotion Foundry — Cast the match</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -13,18 +13,20 @@
     <!-- 버튼에서 트로피까지 감정이 실제로 이동하는 전송 레이어 -->
     <div id="cast-feedback" aria-hidden="true"></div>
 
-    <!-- 상단: 경기 라벨 + 진행 바 -->
+    <!-- 상단: 하나의 주조 시스템으로 읽히는 상태 프레임 -->
     <header id="topbar">
       <div class="match">
-        <span class="brand-mark">EMOTION / 01</span>
-        <span id="phase-tag">Before kickoff</span>
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="brand-mark">EMOTION FOUNDRY</span>
+        <span class="frame-divider" aria-hidden="true"></span>
+        <span id="phase-tag">MOLD 01 / READY</span>
       </div>
     </header>
 
     <div id="scene-copy" aria-hidden="true">
-      <span class="eyebrow">Goals go on the scoreboard. Passion gets a trophy.</span>
-      <span class="scene-title">Feel it.<br /><em>Cast it.</em></span>
-      <span class="scene-subtitle">Every touch is cast into your trophy — and stays forever.</span>
+      <span class="eyebrow">LIVE EMOTION / PERMANENT FORM</span>
+      <span class="scene-title">Cast what<br />the match<br /><em>made you feel.</em></span>
+      <span class="scene-subtitle">Each reaction enters the mold and becomes part of one irreversible object.</span>
     </div>
 
     <!-- 하이라이트 영상 — 기본은 아이콘, 펼쳤을 때만 화면과 링크 입력을 노출한다. -->
@@ -41,8 +43,8 @@
         <svg class="video-toggle-icon" viewBox="0 0 30 21" aria-hidden="true">
           <defs>
             <linearGradient id="youtube-icon-gradient" x1="2" y1="1" x2="28" y2="20" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#ff335d" />
-              <stop offset="1" stop-color="#dc1741" />
+              <stop stop-color="#f0ecdf" />
+              <stop offset="1" stop-color="#738cff" />
             </linearGradient>
           </defs>
           <rect width="30" height="21" rx="6" fill="url(#youtube-icon-gradient)" />
@@ -72,47 +74,52 @@
 
     <!-- 시작/종료 컨트롤 -->
     <div id="controls">
-      <button id="start-btn" class="primary">Start the memory <span>↗</span></button>
-      <button id="end-btn" class="ghost" hidden>Finish memory <span>→</span></button>
+      <button id="start-btn" class="primary">ENTER THE FOUNDRY <span>↗</span></button>
+      <button id="end-btn" class="ghost" hidden>SEAL THE CAST <span>→</span></button>
     </div>
 
-    <!-- 감정 입력 팔레트 (§6) — 크고 멀찍이 -->
+    <!-- 감정 입력 팔레트 (§6) — 하나의 주조 콘솔 안에서 감정색만 순간적으로 나타난다. -->
     <div id="palette" hidden>
       <button class="emo-btn" data-emo="0" style="--c: #f5a524">
         <span class="emo-label">YES!</span>
-        <span class="emo-hint">rapid tap · <kbd>J</kbd></span>
+        <span class="emo-hint">rapid tap <kbd>J</kbd></span>
       </button>
       <button class="emo-btn" data-emo="1" style="--c: #e4573d">
         <span class="emo-label">NO!</span>
-        <span class="emo-hint">tap · <kbd>F</kbd></span>
+        <span class="emo-hint">single tap <kbd>F</kbd></span>
       </button>
       <button class="emo-btn" data-emo="2" style="--c: #3b82f6">
         <span class="emo-label">PLEASE!</span>
-        <span class="emo-hint">hold · <kbd>Space</kbd></span>
+        <span class="emo-hint">hold <kbd>Space</kbd></span>
       </button>
     </div>
 
     <!-- 결과 / 박제 화면 (§10) -->
     <div id="result" hidden>
       <div class="result-card">
-        <h1>Your trophy is cast</h1>
-        <p class="tagline">This is how I lived that match.</p>
+        <span class="result-kicker">CAST 01 / SEALED</span>
+        <h1>Your emotion<br />has taken form.</h1>
+        <p class="tagline">One match. One irreversible object.</p>
         <div class="result-meta">
           <div><span>recorded</span><b id="r-duration">–</b></div>
           <div><span>beats</span><b id="r-beats">–</b></div>
-          <div><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
         </div>
 
-        <!-- 결산 — 감정별 횟수·홀드 시간·시간 점유율 -->
-        <div class="report">
-          <div class="pie" id="pie"></div>
-          <div class="legend">
-            <div><i style="--c: var(--gold)"></i><span>YES!</span><b id="rep-yes">–</b></div>
-            <div><i style="--c: var(--red)"></i><span>NO!</span><b id="rep-no">–</b></div>
-            <div><i style="--c: #4a8dff"></i><span>PLEASE!</span><b id="rep-hold">–</b></div>
-            <div><i style="--c: #262c48"></i><span>quiet</span><b id="rep-quiet">–</b></div>
+        <details class="result-details">
+          <summary>VIEW CAST DATA <span>+</span></summary>
+          <div class="detail-inner">
+            <div class="hash-row"><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
+            <div class="report">
+              <div class="pie" id="pie"></div>
+              <div class="legend">
+                <div><i style="--c: var(--gold)"></i><span>YES!</span><b id="rep-yes">–</b></div>
+                <div><i style="--c: var(--red)"></i><span>NO!</span><b id="rep-no">–</b></div>
+                <div><i style="--c: #4a8dff"></i><span>PLEASE!</span><b id="rep-hold">–</b></div>
+                <div><i style="--c: #262c48"></i><span>quiet</span><b id="rep-quiet">–</b></div>
+              </div>
+            </div>
           </div>
-        </div>
+        </details>
 
         <div class="mint-row">
           <label class="chain-toggle">

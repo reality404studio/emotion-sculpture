@@ -50,12 +50,12 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// 스타디움 나이트 — 가산 블렌딩 파티클의 발광은 어두운 무대에서만 산다
-renderer.setClearColor(0x0a0d18, 1);
+// Emotion Foundry — 색은 오브젝트에서만 나오고 공간은 거의 무채색으로 유지한다.
+renderer.setClearColor(0x050609, 1);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0d18);
-scene.fog = new THREE.FogExp2(0x0a0d18, 0.012);
+scene.background = new THREE.Color(0x050609);
+scene.fog = new THREE.FogExp2(0x050609, 0.018);
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 2.3, 8.4);
@@ -69,30 +69,36 @@ controls.maxDistance = 14;
 controls.autoRotate = false;
 controls.target.set(0, 2.05, 0);
 
-// 어두운 주조 의식 — 차가운 윤곽 위를 따뜻한 주조광이 올라간다.
-const ambient = new THREE.HemisphereLight(0x7188d8, 0x080b13, 0.13);
+// 검은 주조실 — 아이보리 키와 코발트 림이 유리의 두께만 드러낸다.
+const ambient = new THREE.HemisphereLight(0xc7d0e8, 0x020306, 0.11);
 scene.add(ambient);
 
-const key = new THREE.DirectionalLight(0xffe0b0, 0.24);
+const key = new THREE.DirectionalLight(0xf5f0df, 0.24);
 key.position.set(4.8, 8.5, 6.2);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
 key.target.position.set(0, 2, 0);
 
-const rim = new THREE.DirectionalLight(0x7695ff, 1.8);
+const rim = new THREE.DirectionalLight(0x6d86ff, 1.8);
 rim.position.set(-5.5, 6.5, -6.5);
 rim.target.position.set(0, 2.2, 0);
 
-const fill = new THREE.PointLight(0xffb66b, 0.08, 18, 2);
+const fill = new THREE.PointLight(0xe6e1d4, 0.08, 18, 2);
 fill.position.set(4.2, 2.5, 4.4);
 
-const stage = new THREE.SpotLight(0xffd29a, 0.75, 18, 0.36, 0.9, 1.5);
+const stage = new THREE.SpotLight(0xf3eddd, 0.75, 18, 0.3, 0.92, 1.5);
 stage.position.set(0, 7.5, 3.5);
 stage.target.position.set(0, 0.15, 0);
 
 const casting = new THREE.PointLight(0xff9d35, 0, 4.6, 2);
 const impactLight = new THREE.PointLight(0xffffff, 0, 2.8, 2);
 const sweepLight = new THREE.PointLight(0xffe5ba, 0, 8.5, 1.6);
+const glassKey = new THREE.RectAreaLight(0x8ba0ff, 2.4, 2.2, 5.8);
+glassKey.position.set(-3.7, 3.1, -2.6);
+glassKey.lookAt(0, 2.2, 0);
+const glassEdge = new THREE.RectAreaLight(0xf5f0df, 1.5, 1.4, 4.8);
+glassEdge.position.set(3.8, 2.8, 1.4);
+glassEdge.lookAt(0, 2.1, 0);
 scene.add(
   key,
   key.target,
@@ -103,24 +109,34 @@ scene.add(
   stage.target,
   casting,
   impactLight,
-  sweepLight
+  sweepLight,
+  glassKey,
+  glassEdge
 );
 
-// 야간 피치 — 잔디 그린 바닥 + 은은한 후광
+// 무광 주조실 바닥. 경기장 언어는 영상에만 남기고 무대는 하나의 재료 체계로 통일한다.
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(10, 96),
-  new THREE.MeshStandardMaterial({
-    color: 0x12391e,
-    roughness: 0.88,
-    metalness: 0.02,
-    emissive: new THREE.Color(0x0a2e12),
-    emissiveIntensity: 0.14,
-  })
+  new THREE.CircleGeometry(12, 96),
+  new THREE.MeshBasicMaterial({ color: 0x050609 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.035;
 floor.receiveShadow = true;
 scene.add(floor);
+
+const stageRing = new THREE.Mesh(
+  new THREE.TorusGeometry(2.05, 0.012, 8, 128),
+  new THREE.MeshBasicMaterial({
+    color: 0x617cff,
+    transparent: true,
+    opacity: 0.2,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  })
+);
+stageRing.rotation.x = Math.PI / 2;
+stageRing.position.y = 0.008;
+scene.add(stageRing);
 
 // 블룸 — 파티클과 주조선이 물리적으로 빛나게 (다크 스테이지 전제)
 const composer = new EffectComposer(renderer);
@@ -164,6 +180,13 @@ let compareGroup = null;
 let compareTrophies = [];
 let ruler = null; // 결과 화면의 발광 시간 눈금자
 
+function installDormantTrophy() {
+  sculpture = new Trophy(0x454d4f54);
+  scene.add(sculpture.group);
+}
+
+installDormantTrophy();
+
 const fmtTime = (ms) => {
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -180,7 +203,7 @@ function makeTickLabel(text) {
   const ctx = canvas.getContext('2d');
   ctx.font = '600 30px ui-monospace, Menlo, monospace';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(238, 244, 255, 0.92)';
+  ctx.fillStyle = 'rgba(221, 226, 242, 0.54)';
   ctx.fillText(text, 6, 34);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -206,9 +229,9 @@ function buildRuler(durationMs) {
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(points), 3));
   const mat = new THREE.LineBasicMaterial({
-    color: 0xffffff,
+    color: 0x8ea3ff,
     transparent: true,
-    opacity: 0.85,
+    opacity: 0.28,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -250,12 +273,17 @@ let liveProgress = 0;
 // ─────────────────────────────────────────────────────────────
 function startMatch() {
   if (phase !== 'idle') return;
+  document.body.classList.remove('is-result');
   castSound.reset();
   // Start 제스처에서 잠금 해제를 시작한다. 준비 중 들어온 감정음은 CastSound가 큐에 보존한다.
   castSound.unlock().catch(() => {});
   session = createSession();
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
   session.stats = { yesTaps: 0, noTaps: 0, holdMs: 0 };
+  if (sculpture) {
+    scene.remove(sculpture.group);
+    sculpture.dispose();
+  }
   sculpture = new Trophy(sessionSeed(session));
   scene.add(sculpture.group);
   // live 시간 매핑: 3분 = 트로피 전체 높이 (조기 종료 시 finishCast가 재정규화)
@@ -282,7 +310,7 @@ function startMatch() {
   endBtn.hidden = false;
   palette.hidden = false;
   resultEl.hidden = true;
-  phaseTag.textContent = 'Casting — pour your emotions';
+  phaseTag.textContent = 'CASTING / MATERIAL IN MOTION';
   document.body.classList.add('is-live');
   // 점화 클로즈업에서 시작해 주조선과 함께 올라가는 카메라·조명 시퀀스.
   cinematic.beginLive();
@@ -300,6 +328,7 @@ async function endMatch() {
   session.endedAt = Date.now();
   resultEl.hidden = true;
   document.body.classList.add('is-revealing');
+  document.body.classList.add('is-result');
 
   // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
   sculpture.finishCast();
@@ -316,13 +345,14 @@ async function endMatch() {
 
   endBtn.hidden = true;
   palette.hidden = true;
-  phaseTag.textContent = 'Cast complete — rotate your trophy';
+  phaseTag.textContent = 'SEALED / MOVE TO INSPECT';
 
   $('#r-beats').textContent = String(session.beats.length);
   $('#r-hash').textContent = session.signatureHash.slice(0, 24) + '…';
   $('#r-duration').textContent = fmtTime(elapsed);
   $('#mint-status').textContent = '';
   $('#mint-result').hidden = true;
+  $('.result-details').open = false;
   fillReport(elapsed);
 
   // 시간 눈금자 — 이 세션의 실제 기록 길이에 맞춰 생성
@@ -701,9 +731,11 @@ $('#replay-btn').addEventListener('click', () => {
   phase = 'idle';
   liveProgress = 0;
   startBtn.hidden = false;
-  phaseTag.textContent = 'Before kickoff';
+  phaseTag.textContent = 'MOLD 01 / READY';
   cinematic.resetIdle(true);
-  document.body.classList.remove('is-live');
+  document.body.classList.remove('is-live', 'is-result');
+  sculpture = null;
+  installDormantTrophy();
 });
 
 // ─────────────────────────────────────────────────────────────

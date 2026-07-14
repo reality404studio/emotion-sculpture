@@ -51,12 +51,12 @@ export class CinematicDirector {
     this.impactAge = 99;
     this.controls.enabled = false;
     this.controls.autoRotate = false;
-    this.goalPos.set(3.15, 1.72, 8.15);
-    this.goalTarget.set(0, 1.95, 0);
+    this.goalPos.set(3.0, 2.15, 7.85);
+    this.goalTarget.set(0, 2.2, 0);
     if (instant) {
       this.camera.position.copy(this.goalPos);
       this.controls.target.copy(this.goalTarget);
-      this.camera.fov = 42;
+      this.camera.fov = 40;
       this.camera.updateProjectionMatrix();
     }
     this._setLightTargets('idle', 1);
@@ -92,13 +92,13 @@ export class CinematicDirector {
   showResult(instant = true) {
     this.mode = 'result';
     this.age = 0;
-    const angle = 0.34;
-    this.goalTarget.set(0, this.totalHeight * 0.47, 0);
-    this.goalPos.set(Math.sin(angle) * 8.7, this.totalHeight * 0.57, Math.cos(angle) * 8.7);
+    const angle = 0.3;
+    this.goalTarget.set(0, this.totalHeight * 0.49, 0);
+    this.goalPos.set(Math.sin(angle) * 8.15, this.totalHeight * 0.58, Math.cos(angle) * 8.15);
     if (instant) {
       this.camera.position.copy(this.goalPos);
       this.controls.target.copy(this.goalTarget);
-      this.camera.fov = 38;
+      this.camera.fov = 37;
       this.camera.updateProjectionMatrix();
     }
     this.controls.enabled = true;
@@ -133,10 +133,10 @@ export class CinematicDirector {
 
   _updateIdle(dt) {
     // 멈춘 화면이 아니라 숨을 참고 있는 듯한 4° 이내의 아주 느린 드리프트.
-    const angle = 0.37 + Math.sin(this.age * 0.16) * 0.025;
-    this.goalPos.set(Math.sin(angle) * 8.7, 1.72, Math.cos(angle) * 8.7);
-    this.goalTarget.set(0, 1.95, 0);
-    this._moveCamera(dt, 42, 1.25);
+    const angle = 0.36 + Math.sin(this.age * 0.14) * 0.022;
+    this.goalPos.set(Math.sin(angle) * 8.4, 2.15, Math.cos(angle) * 8.4);
+    this.goalTarget.set(0, 2.2, 0);
+    this._moveCamera(dt, 40, 1.1);
     this._setLightTargets('idle', dt);
   }
 
@@ -147,9 +147,10 @@ export class CinematicDirector {
     }
 
     const intro = ease(this.age / 1.15);
-    const angle = 0.19 - progress * 0.38;
-    let distance = 5.35 + progress * 1.55;
-    let targetY = this.baseHeight + 0.12 + (castY - this.baseHeight) * 0.72;
+    const angle = 0.22 - progress * 0.32;
+    let distance = 8.45 + progress * 0.4;
+    // 주조선을 추적하되 몰드 전체는 프레임 안에 둔다. 형상이 자라는 과정이 먼저 읽혀야 한다.
+    let targetY = 2.2 + (castY - this.baseHeight) * 0.08;
     const builtCenter = (this.baseHeight + castY) * 0.5;
     const milestonePulse = this.milestoneAge < 1.05 ? Math.sin((this.milestoneAge / 1.05) * Math.PI) : 0;
     distance += milestonePulse * 2.0;
@@ -157,8 +158,8 @@ export class CinematicDirector {
 
     this.livePos.set(Math.sin(angle) * distance, targetY + 0.34, Math.cos(angle) * distance);
     this.liveTarget.set(0, targetY, 0);
-    this.goalPos.set(1.05, 1.16, 5.25).lerp(this.livePos, intro);
-    this.goalTarget.set(0, this.baseHeight + 0.08, 0).lerp(this.liveTarget, intro);
+    this.goalPos.set(1.7, 2.42, 8.15).lerp(this.livePos, intro);
+    this.goalTarget.set(0, 2.15, 0).lerp(this.liveTarget, intro);
 
     // 충돌 프레임에만 작은 반동. 이동 중에는 카메라를 흔들지 않는다.
     if (this.impactAge < 0.75 && this.impactStrength > 0.01) {
@@ -171,19 +172,19 @@ export class CinematicDirector {
       else this.goalPos.y += envelope * 0.065;
     }
 
-    this._moveCamera(dt, 41.5 - milestonePulse * 1.5, 5.8);
+    this._moveCamera(dt, 39.5 - milestonePulse * 1.2, 5.4);
     this.lights.casting.position.set(1.15, castY + 0.22, 1.85);
     this._setLightTargets('live', dt);
   }
 
   _updateReveal(dt) {
     const t = ease(this.age / 2.05);
-    const angle = 0.34;
-    this.heroTarget.set(0, this.totalHeight * 0.47, 0);
-    this.heroPos.set(Math.sin(angle) * 8.7, this.totalHeight * 0.57, Math.cos(angle) * 8.7);
+    const angle = 0.3;
+    this.heroTarget.set(0, this.totalHeight * 0.49, 0);
+    this.heroPos.set(Math.sin(angle) * 8.15, this.totalHeight * 0.58, Math.cos(angle) * 8.15);
     this.goalPos.lerpVectors(this.revealFromPos, this.heroPos, t);
     this.goalTarget.lerpVectors(this.revealFromTarget, this.heroTarget, t);
-    this._moveCamera(dt, 38, 8.0);
+    this._moveCamera(dt, 37, 8.0);
 
     const dark = this.age < 0.16
       ? 1 - ease(this.age / 0.16) * 0.82
@@ -213,10 +214,10 @@ export class CinematicDirector {
   _setLightTargets(sceneMode, dt, scale = 1) {
     const k = dt >= 1 ? 1 : damp(4.8, dt);
     const targets = sceneMode === 'idle'
-      ? { ambient: 0.13, key: 0.24, rim: 1.8, fill: 0.08, stage: 0.75, casting: 0, exposure: 0.88, bloom: 0.34 }
+      ? { ambient: 0.12, key: 0.42, rim: 2.05, fill: 0.12, stage: 0.88, casting: 0, exposure: 0.93, bloom: 0.22 }
       : sceneMode === 'live'
-        ? { ambient: 0.19, key: 0.72, rim: 2.35, fill: 0.32, stage: 1.7, casting: 2.8, exposure: 1.0, bloom: 0.5 }
-        : { ambient: 0.3, key: 1.02, rim: 2.5, fill: 0.55, stage: 1.4, casting: 0, exposure: 1.04, bloom: 0.56 };
+        ? { ambient: 0.17, key: 0.86, rim: 2.45, fill: 0.28, stage: 1.55, casting: 2.5, exposure: 1.0, bloom: 0.38 }
+        : { ambient: 0.22, key: 1.18, rim: 2.75, fill: 0.46, stage: 1.25, casting: 0, exposure: 1.03, bloom: 0.42 };
 
     for (const name of ['ambient', 'key', 'rim', 'fill', 'stage', 'casting']) {
       const target = targets[name] * scale;

@@ -249,8 +249,8 @@ export class Trophy {
     this.points.frustumCulled = false;
   }
 
-  // 고스트 트로피 — 입력이 없어도 항상 보이는 저폴리 삼각 메시 아키타입.
-  // 어두운 패싯 필 + 와이어프레임 글로우. 감정 입자는 이 뼈대 위에 얹힌다.
+  // 유리 몰드 — 완성 전에도 잠든 실루엣이 보이고, 감정 입자는 그 안에 응고된다.
+  // 전체 와이어프레임 대신 물성 있는 투명 쉘과 최소한의 외곽선만 사용한다.
   _buildGhost() {
     const ROWS_G = 46;
     const SEG_G = 40;
@@ -290,49 +290,69 @@ export class Trophy {
     this._ghostGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this._ghostGeom.computeVertexNormals();
 
-    this._ghostFillMat = new THREE.MeshStandardMaterial({
-      color: 0x1a2138,
-      roughness: 0.38,
-      metalness: 0.55,
-      flatShading: true, // 삼각 패싯이 보이는 저폴리 결
+    this._ghostFillMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9ba9c8,
+      roughness: 0.12,
+      metalness: 0,
+      transmission: 0.68,
+      thickness: 0.9,
+      ior: 1.46,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.36,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      clearcoat: 1,
+      clearcoatRoughness: 0.16,
+      emissive: new THREE.Color(0x111a35),
+      emissiveIntensity: 0.08,
     });
-    this._ghostWireMat = new THREE.MeshBasicMaterial({
-      color: 0x4a5fa8,
-      wireframe: true,
+    this._ghostWireMat = new THREE.LineBasicMaterial({
+      color: 0x93a8ff,
       transparent: true,
-      opacity: 0.07,
+      opacity: 0.16,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
     const fill = new THREE.Mesh(this._ghostGeom, this._ghostFillMat);
-    const wire = new THREE.Mesh(this._ghostGeom, this._ghostWireMat);
+    fill.renderOrder = 1;
+    const edgeGeom = new THREE.EdgesGeometry(this._ghostGeom, 34);
+    const wire = new THREE.LineSegments(edgeGeom, this._ghostWireMat);
+    wire.renderOrder = 2;
+    this._ghostEdgeGeom = edgeGeom;
     this._ghostGroup = new THREE.Group();
     this._ghostGroup.add(fill, wire);
   }
 
-  // 받침대 — 감정과 무관한 고정 지오메트리, 각인의 자리 (§2.1)
+  // 받침대 — 조형보다 먼저 보이지 않는 작은 주조용 클램프.
   _buildBase() {
     this._baseGroup = new THREE.Group();
-    const h1 = BASE_H * 0.52;
-    const h2 = BASE_H * 0.48;
-    const stone = new THREE.MeshStandardMaterial({ color: 0x35322e, roughness: 0.4, metalness: 0.6 });
-    this._bandMat = new THREE.MeshStandardMaterial({
-      color: 0xd7a545,
-      roughness: 0.22,
-      metalness: 0.95,
-      emissive: new THREE.Color(0xa06a18),
-      emissiveIntensity: 0.25,
+    const h1 = BASE_H * 0.31;
+    const h2 = BASE_H * 0.32;
+    const neckH = BASE_H - h1 - h2;
+    const stone = new THREE.MeshStandardMaterial({
+      color: 0x0c0e12,
+      roughness: 0.32,
+      metalness: 0.78,
+      emissive: new THREE.Color(0x05070c),
+      emissiveIntensity: 0.2,
     });
-    const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.42, h1, 64), stone);
+    this._bandMat = new THREE.MeshStandardMaterial({
+      color: 0x718cff,
+      roughness: 0.18,
+      metalness: 0.95,
+      emissive: new THREE.Color(0x294ab8),
+      emissiveIntensity: 0.32,
+    });
+    const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(0.94, 1.06, h1, 64), stone);
     tier1.position.y = h1 / 2;
-    const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.18, h2, 64), stone);
+    const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.82, h2, 64), stone);
     tier2.position.y = h1 + h2 / 2;
-    const band = new THREE.Mesh(new THREE.TorusGeometry(1.06, 0.024, 12, 96), this._bandMat);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.5, neckH, 48), stone);
+    neck.position.y = h1 + h2 + neckH / 2;
+    const band = new THREE.Mesh(new THREE.TorusGeometry(0.73, 0.017, 10, 96), this._bandMat);
     band.rotation.x = Math.PI / 2;
     band.position.y = h1;
-    [tier1, tier2, band].forEach((m) => {
+    [tier1, tier2, neck, band].forEach((m) => {
       m.castShadow = true;
       m.receiveShadow = true;
       this._baseGroup.add(m);
@@ -641,10 +661,13 @@ export class Trophy {
       const pop = Math.sin(this._impactAge * 20) * envelope * 0.055;
       this.group.scale.setScalar(1 + pop);
       this._ghostFillMat.emissive.copy(this._impactColor);
-      this._ghostFillMat.emissiveIntensity = 0.08 + envelope * 0.82;
+      this._ghostFillMat.emissiveIntensity = 0.08 + envelope * 0.68;
+      this._ghostWireMat.opacity = 0.16 + envelope * 0.22;
     } else {
       this.group.scale.setScalar(1);
-      this._ghostFillMat.emissiveIntensity = 0;
+      this._ghostFillMat.emissive.setHex(0x111a35);
+      this._ghostFillMat.emissiveIntensity = 0.08;
+      this._ghostWireMat.opacity = 0.16;
     }
 
     if (this.live) {
@@ -686,6 +709,7 @@ export class Trophy {
     this.geometry.dispose();
     this.material.dispose();
     this._ghostGeom.dispose();
+    this._ghostEdgeGeom.dispose();
     this._ghostFillMat.dispose();
     this._ghostWireMat.dispose();
     this._ringMat.dispose();

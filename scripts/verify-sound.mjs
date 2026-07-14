@@ -47,6 +47,8 @@ class FakeSource extends FakeNode {
 class FakeAudioContext {
   static initialState = 'suspended';
   static instances = [];
+  static delayedStateChange = false;
+  static hangingResumePromise = false;
 
   constructor() {
     this.state = FakeAudioContext.initialState;
@@ -67,8 +69,32 @@ class FakeAudioContext {
   }
   async resume() {
     this.resumeCalls++;
+    if (FakeAudioContext.delayedStateChange) {
+      setTimeout(() => {
+        this.state = 'running';
+        this.listeners.forEach((listener) => listener());
+      }, 10);
+      if (FakeAudioContext.hangingResumePromise) return new Promise(() => {});
+      return;
+    }
     this.state = 'running';
     this.listeners.forEach((listener) => listener());
+  }
+}
+
+class FakeAudio {
+  static instances = [];
+
+  constructor(src) {
+    this.src = src;
+    this.style = {};
+    this.playCalls = 0;
+    FakeAudio.instances.push(this);
+  }
+  setAttribute() {}
+  play() {
+    this.playCalls++;
+    return Promise.resolve();
   }
 }
 
@@ -87,8 +113,16 @@ class TestCastSound extends CastSound {
   _scheduleStirSettle(pan, height) { this.played.push(`settle:${pan}:${height}`); }
 }
 
-globalThis.window = { AudioContext: FakeAudioContext };
-globalThis.document = { documentElement: { dataset: {} } };
+globalThis.window = {
+  AudioContext: FakeAudioContext,
+  Audio: FakeAudio,
+  setTimeout,
+  clearTimeout,
+};
+globalThis.document = {
+  documentElement: { dataset: {} },
+  body: { appendChild() {} },
+};
 
 const sound = new TestCastSound();
 const settlePlayback = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -103,6 +137,8 @@ await settlePlayback();
 assert.deepEqual(sound.played, ['pop:0', 'whoosh:0']);
 assert.equal(sound.ctx.state, 'running');
 assert.equal(document.documentElement.dataset.sound, 'running');
+assert.equal(FakeAudio.instances.length, 1);
+assert.ok(FakeAudio.instances[0].playCalls > 0);
 
 // WebKit interrupted 상태도 버튼 제스처에서 resume한다.
 sound.ctx.state = 'interrupted';
@@ -111,6 +147,18 @@ sound.launch(1);
 await sound._unlockPromise;
 await settlePlayback();
 assert.equal(interruptedContext.resumeCalls, 2);
+assert.deepEqual(sound.played.slice(-2), ['pop:1', 'whoosh:1']);
+
+// WebKit이 resume Promise를 먼저 끝내고 statechange를 늦게 보내도 첫 효과음을 보존한다.
+sound.ctx.state = 'interrupted';
+FakeAudioContext.delayedStateChange = true;
+FakeAudioContext.hangingResumePromise = true;
+sound.launch(1);
+await sound._unlockPromise;
+await settlePlayback();
+FakeAudioContext.delayedStateChange = false;
+FakeAudioContext.hangingResumePromise = false;
+assert.equal(sound.ctx.state, 'running');
 assert.deepEqual(sound.played.slice(-2), ['pop:1', 'whoosh:1']);
 
 // 닫힌 컨텍스트는 재사용하지 않고 새 인스턴스로 교체한다.

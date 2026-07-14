@@ -18,6 +18,8 @@ export class CastSound {
     this.yesStep = 0;
     this.voiceCount = 0;
     this._unlockPromise = null;
+    this._mediaBridge = null;
+    this._mediaBridgeUrl = null;
     this._nextStirAt = 0;
     this._stirSeed = 0;
     this._stirSettleTimer = null;
@@ -30,6 +32,10 @@ export class CastSound {
       document.documentElement.dataset.sound = 'unsupported';
       return false;
     }
+
+    // iOS에서는 Web Audio가 running이어도 미디어 출력 세션이 잠겨 무음이 될 수 있다.
+    // 실제 터치 제스처 안에서 짧은 무음 media element도 함께 재생해 출력 경로를 연다.
+    this._startMediaBridge();
 
     // 모바일 Safari 등에서 닫힌 컨텍스트가 남으면 resume할 수 없으므로 새로 만든다.
     if (this.ctx?.state === 'closed') {
@@ -61,7 +67,18 @@ export class CastSound {
     this._unlockPromise = (async () => {
       try {
         this._primeContext();
-        if (this.ctx.state !== 'running') await this.ctx.resume();
+        if (this.ctx.state !== 'running') {
+          const resumePromise = this.ctx.resume();
+          // WebKit은 resume Promise가 끝나기 전에 시작된 source를 사용자 제스처로 인정한다.
+          this._primeContext();
+          // 일부 모바일 브라우저는 statechange 뒤에도 resume Promise를 오래 보류한다.
+          // 실제 상태가 running이면 Promise 응답을 기다리지 않고 대기 중인 효과음을 재생한다.
+          await Promise.race([
+            Promise.resolve(resumePromise),
+            this._waitForRunning(640),
+          ]);
+        }
+        if (this.ctx.state !== 'running') await this._waitForRunning();
         this._primeContext();
         this._reportState();
         return this.ctx.state === 'running';
@@ -150,7 +167,8 @@ export class CastSound {
   _createContext(AudioContextClass) {
     this.ctx = new AudioContextClass();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.86;
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches;
+    this.master.gain.value = coarsePointer ? 1.04 : 0.86;
 
     const compressor = this.ctx.createDynamicsCompressor();
     compressor.threshold.value = -18;
@@ -183,6 +201,77 @@ export class CastSound {
     source.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
     source.connect(this.master);
     source.start(0);
+  }
+
+  _startMediaBridge() {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || typeof window.Audio !== 'function') return;
+    if (!this._mediaBridge) {
+      try {
+        const sampleRate = 8000;
+        const sampleCount = 80;
+        const buffer = new ArrayBuffer(44 + sampleCount * 2);
+        const view = new DataView(buffer);
+        const write = (offset, value) => {
+          for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+        };
+        write(0, 'RIFF');
+        view.setUint32(4, 36 + sampleCount * 2, true);
+        write(8, 'WAVE');
+        write(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        write(36, 'data');
+        view.setUint32(40, sampleCount * 2, true);
+        // 완전한 0 샘플은 일부 WebKit 버전이 무음 자원으로 최적화한다.
+        // ±1 PCM은 들리지 않지만 실제 미디어 스트림으로 유지된다.
+        for (let i = 0; i < sampleCount; i++) view.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
+
+        const url = URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+        const audio = new window.Audio(url);
+        audio.loop = true;
+        audio.preload = 'auto';
+        audio.playsInline = true;
+        audio.setAttribute('playsinline', '');
+        audio.setAttribute('aria-hidden', 'true');
+        audio.style.display = 'none';
+        document.body?.appendChild(audio);
+        this._mediaBridge = audio;
+        this._mediaBridgeUrl = url;
+      } catch {
+        return;
+      }
+    }
+
+    try {
+      const playPromise = this._mediaBridge.play();
+      if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(() => {});
+    } catch {
+      // 브리지가 막혀도 Web Audio 자체의 resume 시도는 계속한다.
+    }
+  }
+
+  _waitForRunning(timeoutMs = 320) {
+    if (!this.ctx || this.ctx.state === 'running') return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        this.ctx?.removeEventListener?.('statechange', onStateChange);
+        resolve();
+      };
+      const onStateChange = () => {
+        if (this.ctx?.state === 'running') finish();
+      };
+      const timer = window.setTimeout(finish, timeoutMs);
+      this.ctx.addEventListener?.('statechange', onStateChange);
+    });
   }
 
   _reportState() {

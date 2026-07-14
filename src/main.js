@@ -34,6 +34,9 @@ const endBtn = $('#end-btn');
 const palette = $('#palette');
 const phaseTag = $('#phase-tag');
 const resultEl = $('#result');
+const resultCard = $('.result-card');
+const resultPanelToggle = $('#result-panel-toggle');
+const resultPanelBody = $('#result-panel-body');
 const compareBar = $('#compare-bar');
 const castFeedback = $('#cast-feedback');
 
@@ -45,6 +48,8 @@ const castSound = new CastSound();
 // 이어지는 감정 버튼 핸들러가 이미 running 상태의 오디오를 사용할 수 있다.
 const armCastAudio = () => castSound.unlock().catch(() => {});
 window.addEventListener('pointerdown', armCastAudio, { capture: true, passive: true });
+window.addEventListener('touchend', armCastAudio, { capture: true, passive: true });
+window.addEventListener('click', armCastAudio, { capture: true, passive: true });
 window.addEventListener('keydown', armCastAudio, { capture: true });
 
 const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
@@ -207,6 +212,24 @@ let compareGroup = null;
 let compareTrophies = [];
 let ruler = null; // 결과 화면의 발광 시간 눈금자
 
+function setResultPanelExpanded(expanded) {
+  resultCard.classList.toggle('is-collapsed', !expanded);
+  resultPanelToggle.setAttribute('aria-expanded', String(expanded));
+  resultPanelToggle.setAttribute('aria-label', expanded ? 'Hide result information' : 'Show result information');
+  resultPanelBody.setAttribute('aria-hidden', String(!expanded));
+  resultPanelBody.toggleAttribute('inert', !expanded);
+  $('.result-panel-toggle-label').textContent = expanded ? 'HIDE RESULT INFO' : 'VIEW RESULT INFO';
+}
+
+function resetResultPanel() {
+  // 손가락 기반 기기에서는 트로피를 먼저 보여주고 정보는 사용자가 원할 때 연다.
+  setResultPanelExpanded(!viewport.compact);
+}
+
+resultPanelToggle.addEventListener('click', () => {
+  setResultPanelExpanded(resultPanelToggle.getAttribute('aria-expanded') !== 'true');
+});
+
 function installDormantTrophy() {
   sculpture = new Trophy(0x454d4f54);
   sculpture.setPixelRatio(renderPixelRatio());
@@ -359,6 +382,7 @@ async function endMatch() {
   resultEl.hidden = true;
   document.body.classList.add('is-revealing');
   document.body.classList.add('is-result');
+  resetResultPanel();
 
   // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
   sculpture.finishCast();

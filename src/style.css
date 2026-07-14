@@ -284,7 +284,9 @@ button span { color: currentColor; margin-left: 8px; }
   width: 318px;
   max-height: calc(100vh - 100px);
   padding: 22px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   pointer-events: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -293,9 +295,37 @@ button span { color: currentColor; margin-left: 8px; }
   box-shadow: 0 24px 70px rgba(0,0,0,.42);
   animation: panel-enter 600ms cubic-bezier(.2,.7,.2,1) both;
   overscroll-behavior: contain;
+  transition: width 260ms ease, max-height 260ms ease, padding 260ms ease, border-radius 260ms ease;
 }
 
 @keyframes panel-enter { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+.result-panel-toggle {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  color: var(--ink);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.result-panel-toggle:hover { border-color: rgba(132, 151, 255, .42); }
+.result-panel-toggle:active { transform: none; }
+.result-panel-grip { display: none; }
+.result-panel-toggle-copy { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: space-between; gap: 12px; }
+.result-panel-toggle .result-kicker { margin: 0; }
+.result-panel-toggle-label { color: var(--dim); font-size: 7px; font-weight: 750; letter-spacing: .12em; white-space: nowrap; }
+.result-panel-chevron { color: var(--blue); font-size: 14px; transition: transform 220ms ease; }
+.result-card.is-collapsed { width: 230px; max-height: 50px; padding: 0 16px; border-radius: 99px; }
+.result-card.is-collapsed .result-panel-toggle { height: 50px; min-height: 50px; padding: 0; border-bottom: 0; }
+.result-card.is-collapsed .result-panel-chevron { transform: rotate(180deg); }
+.result-panel-body { min-height: 0; padding-top: 16px; overflow: auto; overscroll-behavior: contain; }
+.result-card.is-collapsed .result-panel-body { display: none; }
 .result-kicker { display: block; margin-bottom: 12px; color: var(--blue); }
 .result-card h1 { margin: 0; color: var(--ivory); font-family: var(--display); font-size: 31px; font-weight: 400; line-height: .95; letter-spacing: -.035em; }
 .tagline { margin: 10px 0 18px; color: var(--dim); font-size: 10px; line-height: 1.45; }
@@ -406,7 +436,7 @@ button span { color: currentColor; margin-left: 8px; }
     bottom: 0;
     left: 0;
     width: 100%;
-    max-height: 52dvh;
+    max-height: 68dvh;
     padding:
       18px
       calc(var(--safe-right) + 18px)
@@ -418,6 +448,22 @@ button span { color: currentColor; margin-left: 8px; }
     border-radius: 22px 22px 0 0;
     background: rgba(6, 7, 10, .88);
   }
+  .result-card.is-collapsed {
+    right: calc(var(--safe-right) + 12px);
+    bottom: calc(var(--safe-bottom) + 12px);
+    left: calc(var(--safe-left) + 12px);
+    width: auto;
+    max-height: 58px;
+    padding: 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: rgba(6, 7, 10, .82);
+  }
+  .result-card.is-collapsed .result-panel-toggle { height: 56px; min-height: 56px; }
+  .result-panel-toggle { min-height: 42px; padding-bottom: 13px; }
+  .result-panel-grip { width: 30px; height: 3px; display: block; flex: none; border-radius: 99px; background: rgba(185, 193, 224, .32); }
+  .result-panel-toggle-copy { flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; }
+  .result-panel-toggle-label { font-size: 8px; }
   .result-card:has(.result-details[open]) { max-height: 72dvh; }
   .result-kicker { margin-bottom: 8px; }
   .result-card h1 { font-size: 27px; line-height: .92; }
@@ -473,6 +519,14 @@ button span { color: currentColor; margin-left: 8px; }
     border-radius: 16px;
   }
   .result-card:has(.result-details[open]) { max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px); }
+  .result-card.is-collapsed {
+    top: auto;
+    right: calc(var(--safe-right) + 10px);
+    bottom: calc(var(--safe-bottom) + 10px);
+    left: auto;
+    width: min(260px, calc(100vw - var(--safe-left) - var(--safe-right) - 20px));
+    max-height: 56px;
+  }
   .result-card h1 { font-size: 24px; }
   .tagline { display: none; }
 }

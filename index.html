@@ -97,46 +97,63 @@
     <!-- 결과 / 박제 화면 (§10) -->
     <div id="result" hidden>
       <div class="result-card">
-        <span class="result-kicker">CAST 01 / SEALED</span>
-        <h1>Your emotion<br />has taken form.</h1>
-        <p class="tagline">One match. One irreversible object.</p>
-        <div class="result-meta">
-          <div><span>recorded</span><b id="r-duration">–</b></div>
-          <div><span>beats</span><b id="r-beats">–</b></div>
-        </div>
+        <button
+          id="result-panel-toggle"
+          class="result-panel-toggle"
+          type="button"
+          aria-expanded="true"
+          aria-controls="result-panel-body"
+          aria-label="Hide result information"
+        >
+          <span class="result-panel-grip" aria-hidden="true"></span>
+          <span class="result-panel-toggle-copy">
+            <span class="result-kicker">CAST 01 / SEALED</span>
+            <span class="result-panel-toggle-label">HIDE RESULT INFO</span>
+          </span>
+          <span class="result-panel-chevron" aria-hidden="true">⌄</span>
+        </button>
 
-        <details class="result-details">
-          <summary>VIEW CAST DATA <span>+</span></summary>
-          <div class="detail-inner">
-            <div class="hash-row"><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
-            <div class="report">
-              <div class="pie" id="pie"></div>
-              <div class="legend">
-                <div><i style="--c: var(--gold)"></i><span>YES!</span><b id="rep-yes">–</b></div>
-                <div><i style="--c: var(--red)"></i><span>NO!</span><b id="rep-no">–</b></div>
-                <div><i style="--c: #4a8dff"></i><span>PLEASE!</span><b id="rep-hold">–</b></div>
-                <div><i style="--c: #262c48"></i><span>quiet</span><b id="rep-quiet">–</b></div>
+        <div id="result-panel-body" class="result-panel-body">
+          <h1>Your emotion<br />has taken form.</h1>
+          <p class="tagline">One match. One irreversible object.</p>
+          <div class="result-meta">
+            <div><span>recorded</span><b id="r-duration">–</b></div>
+            <div><span>beats</span><b id="r-beats">–</b></div>
+          </div>
+
+          <details class="result-details">
+            <summary>VIEW CAST DATA <span>+</span></summary>
+            <div class="detail-inner">
+              <div class="hash-row"><span>sculpture hash</span><b id="r-hash" class="mono">–</b></div>
+              <div class="report">
+                <div class="pie" id="pie"></div>
+                <div class="legend">
+                  <div><i style="--c: var(--gold)"></i><span>YES!</span><b id="rep-yes">–</b></div>
+                  <div><i style="--c: var(--red)"></i><span>NO!</span><b id="rep-no">–</b></div>
+                  <div><i style="--c: #4a8dff"></i><span>PLEASE!</span><b id="rep-hold">–</b></div>
+                  <div><i style="--c: #262c48"></i><span>quiet</span><b id="rep-quiet">–</b></div>
+                </div>
               </div>
             </div>
+          </details>
+
+          <div class="mint-row">
+            <label class="chain-toggle">
+              <input type="checkbox" id="use-devnet" />
+              <span>Commit to real devnet (Solana Memo)</span>
+            </label>
+            <button id="mint-btn" class="primary">Mint your memory</button>
           </div>
-        </details>
 
-        <div class="mint-row">
-          <label class="chain-toggle">
-            <input type="checkbox" id="use-devnet" />
-            <span>Commit to real devnet (Solana Memo)</span>
-          </label>
-          <button id="mint-btn" class="primary">Mint your memory</button>
-        </div>
+          <div id="mint-status" class="mint-status"></div>
+          <div id="mint-result" class="mint-result" hidden>
+            <div class="explorer"></div>
+          </div>
 
-        <div id="mint-status" class="mint-status"></div>
-        <div id="mint-result" class="mint-result" hidden>
-          <div class="explorer"></div>
-        </div>
-
-        <div class="result-actions">
-          <button id="compare-btn" class="ghost">Same match, different shape →</button>
-          <button id="replay-btn" class="ghost">Again</button>
+          <div class="result-actions">
+            <button id="compare-btn" class="ghost">Same match, different shape →</button>
+            <button id="replay-btn" class="ghost">Again</button>
+          </div>
         </div>
       </div>
     </div>

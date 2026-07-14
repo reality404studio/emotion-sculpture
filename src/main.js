@@ -39,6 +39,13 @@ const castFeedback = $('#cast-feedback');
 const CAST_COLORS = ['#f5a524', '#e4573d', '#3b82f6'];
 const castSound = new CastSound();
 
+// 브라우저별 자동재생 정책에 가장 확실한 시점은 click보다 앞선 실제 pointerdown/keydown이다.
+// 캡처 단계에서 먼저 컨텍스트를 깨우면 새로고침·다시하기·백그라운드 복귀 뒤에도
+// 이어지는 감정 버튼 핸들러가 이미 running 상태의 오디오를 사용할 수 있다.
+const armCastAudio = () => castSound.unlock().catch(() => {});
+window.addEventListener('pointerdown', armCastAudio, { capture: true, passive: true });
+window.addEventListener('keydown', armCastAudio, { capture: true });
+
 // ─────────────────────────────────────────────────────────────
 // 렌더러 / 씬 / 카메라 / 조명
 // ─────────────────────────────────────────────────────────────
@@ -275,8 +282,8 @@ function startMatch() {
   if (phase !== 'idle') return;
   document.body.classList.remove('is-result');
   castSound.reset();
-  // Start 제스처에서 잠금 해제를 시작한다. 준비 중 들어온 감정음은 CastSound가 큐에 보존한다.
-  castSound.unlock().catch(() => {});
+  // 시작 점화음으로 오디오 활성화를 즉시 확인한다. 준비 중 입력된 소리는 큐에 보존된다.
+  castSound.wake();
   session = createSession();
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
   session.stats = { yesTaps: 0, noTaps: 0, holdMs: 0 };

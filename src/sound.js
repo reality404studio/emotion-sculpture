@@ -83,6 +83,16 @@ export class CastSound {
     this.stopStir();
   }
 
+  // 주조실에 들어가는 첫 제스처에서 오디오가 실제로 열렸음을 알려준다.
+  // 단순 무음 prime만으로는 사용자가 음소거/차단 상태를 구분할 수 없기 때문이다.
+  wake() {
+    this._playWhenReady(() => {
+      const now = this.ctx.currentTime;
+      this._tone(220, now, 0.14, 0.022, 'sine');
+      this._tone(440, now + 0.055, 0.24, 0.015, 'sine');
+    });
+  }
+
   launch(emotion, detail = {}, { duration = 0.6, pan = 0 } = {}) {
     const noteStep = emotion === 0 ? this.yesStep++ : detail.holdStep || 0;
     const voice = { emotion, noteStep, id: this.voiceCount++ };
@@ -140,7 +150,7 @@ export class CastSound {
   _createContext(AudioContextClass) {
     this.ctx = new AudioContextClass();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.68;
+    this.master.gain.value = 0.86;
 
     const compressor = this.ctx.createDynamicsCompressor();
     compressor.threshold.value = -18;

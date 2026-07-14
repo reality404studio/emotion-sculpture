@@ -129,6 +129,14 @@ assert.equal(replayVoice.noteStep, 0);
 assert.equal(replayVoice.id, 0);
 assert.deepEqual(sound.played.slice(-2), ['pop:0', 'whoosh:0']);
 
+// 시작 제스처는 잠금 해제 직후 짧은 점화음 두 음을 들려준다.
+sound.played = [];
+sound.ctx.state = 'suspended';
+sound.wake();
+await sound._unlockPromise;
+await settlePlayback();
+assert.deepEqual(sound.played, ['tone', 'tone']);
+
 sound.ctx.state = 'suspended';
 sound.impact(0, replayVoice);
 await sound._unlockPromise;

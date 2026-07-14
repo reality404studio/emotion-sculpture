@@ -27,24 +27,48 @@
       <span class="scene-subtitle">Every touch is cast into your trophy — and stays forever.</span>
     </div>
 
-    <!-- 하이라이트 영상 (한 시야 안에 영상+버튼) -->
-    <div id="video-panel">
-      <div class="video-wrap">
-        <iframe
-          id="highlight"
-          src="https://www.youtube-nocookie.com/embed/pXwaKB7YEz4?rel=0"
-          title="highlight"
-          frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowfullscreen
-        ></iframe>
+    <!-- 하이라이트 영상 — 기본은 아이콘, 펼쳤을 때만 화면과 링크 입력을 노출한다. -->
+    <aside id="video-panel" class="is-collapsed">
+      <button
+        id="video-toggle"
+        class="video-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="video-content"
+        aria-label="Open YouTube highlight"
+        title="Open YouTube highlight"
+      >
+        <svg class="video-toggle-icon" viewBox="0 0 30 21" aria-hidden="true">
+          <defs>
+            <linearGradient id="youtube-icon-gradient" x1="2" y1="1" x2="28" y2="20" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#ff335d" />
+              <stop offset="1" stop-color="#dc1741" />
+            </linearGradient>
+          </defs>
+          <rect width="30" height="21" rx="6" fill="url(#youtube-icon-gradient)" />
+          <path d="M12.3 6.4L20 10.5L12.3 14.6V6.4Z" fill="white" />
+        </svg>
+        <span class="video-toggle-label">Highlight</span>
+        <span class="video-toggle-chevron" aria-hidden="true">⌃</span>
+      </button>
+      <div id="video-content" class="video-content" aria-hidden="true" inert>
+        <div class="video-wrap">
+          <iframe
+            id="highlight"
+            src="https://www.youtube-nocookie.com/embed/pXwaKB7YEz4?rel=0"
+            title="highlight"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
+        </div>
+        <div class="video-input">
+          <input id="yt-url" type="text" placeholder="Paste a YouTube link…" spellcheck="false" />
+          <button id="yt-load">Load</button>
+        </div>
+        <p class="video-note" id="video-note">Play the highlight. Let your hands react.</p>
       </div>
-      <div class="video-input">
-        <input id="yt-url" type="text" placeholder="Paste a YouTube link…" spellcheck="false" />
-        <button id="yt-load">Load</button>
-      </div>
-      <p class="video-note" id="video-note">Play the highlight. Let your hands react.</p>
-    </div>
+    </aside>
 
     <!-- 시작/종료 컨트롤 -->
     <div id="controls">

@@ -249,8 +249,9 @@ let liveProgress = 0;
 // Phase: 시작
 // ─────────────────────────────────────────────────────────────
 function startMatch() {
+  if (phase !== 'idle') return;
   castSound.reset();
-  // Start 버튼의 사용자 제스처 안에서 잠금을 해제한다. 거절돼도 화면 경험은 그대로 유지한다.
+  // Start 제스처에서 잠금 해제를 시작한다. 준비 중 들어온 감정음은 CastSound가 큐에 보존한다.
   castSound.unlock().catch(() => {});
   session = createSession();
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
@@ -674,6 +675,30 @@ $('#replay-btn').addEventListener('click', () => {
 // 유튜브 링크 → 임베드. 어떤 형태의 URL이든 video id를 뽑아 nocookie로 재생.
 // 채널이 임베드를 막은 영상은 유튜브 정책상 재생 불가 — 안내만 남긴다.
 // ─────────────────────────────────────────────────────────────
+const videoPanel = $('#video-panel');
+const videoToggle = $('#video-toggle');
+const videoContent = $('#video-content');
+
+function setVideoExpanded(expanded) {
+  videoPanel.classList.toggle('is-collapsed', !expanded);
+  videoToggle.setAttribute('aria-expanded', String(expanded));
+  videoToggle.setAttribute('aria-label', expanded ? 'Hide YouTube highlight' : 'Open YouTube highlight');
+  videoToggle.title = expanded ? 'Hide video — audio keeps playing' : 'Open YouTube highlight';
+  videoContent.setAttribute('aria-hidden', String(!expanded));
+  videoContent.toggleAttribute('inert', !expanded);
+  $('.video-toggle-label').textContent = expanded ? 'Hide video' : 'Highlight';
+}
+
+videoToggle.addEventListener('click', () => {
+  setVideoExpanded(videoToggle.getAttribute('aria-expanded') !== 'true');
+});
+
+videoPanel.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || videoToggle.getAttribute('aria-expanded') !== 'true') return;
+  setVideoExpanded(false);
+  videoToggle.focus();
+});
+
 function parseYouTubeId(url) {
   const patterns = [
     /youtu\.be\/([\w-]{11})/,

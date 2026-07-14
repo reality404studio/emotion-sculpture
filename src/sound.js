@@ -17,6 +17,7 @@ export class CastSound {
     this.noise = null;
     this.yesStep = 0;
     this.voiceCount = 0;
+    this._unlockPromise = null;
   }
 
   async unlock() {
@@ -27,24 +28,48 @@ export class CastSound {
       return false;
     }
 
+    // 모바일 Safari 등에서 닫힌 컨텍스트가 남으면 resume할 수 없으므로 새로 만든다.
+    if (this.ctx?.state === 'closed') {
+      this.ctx = null;
+      this.master = null;
+      this.noise = null;
+    }
     if (!this.ctx) {
-      this.ctx = new AudioContextClass();
-      this.master = this.ctx.createGain();
-      this.master.gain.value = 0.68;
-
-      const compressor = this.ctx.createDynamicsCompressor();
-      compressor.threshold.value = -18;
-      compressor.knee.value = 12;
-      compressor.ratio.value = 4;
-      compressor.attack.value = 0.004;
-      compressor.release.value = 0.16;
-      this.master.connect(compressor).connect(this.ctx.destination);
-      this.noise = this._makeNoiseBuffer();
+      try {
+        this._createContext(AudioContextClass);
+      } catch {
+        document.documentElement.dataset.sound = 'blocked';
+        return false;
+      }
     }
 
-    if (this.ctx.state === 'suspended') await this.ctx.resume();
-    document.documentElement.dataset.sound = this.ctx.state;
-    return this.ctx.state === 'running';
+    if (this.ctx.state === 'running') {
+      try {
+        this._primeContext();
+      } catch {
+        // 이미 running이면 무음 버퍼 준비 실패가 실제 효과음 재생을 막을 이유는 없다.
+      }
+      this._reportState();
+      return true;
+    }
+    if (this._unlockPromise) return this._unlockPromise;
+
+    // suspended뿐 아니라 WebKit의 interrupted 상태도 같은 사용자 제스처에서 복구한다.
+    this._unlockPromise = (async () => {
+      try {
+        this._primeContext();
+        if (this.ctx.state !== 'running') await this.ctx.resume();
+        this._primeContext();
+        this._reportState();
+        return this.ctx.state === 'running';
+      } catch {
+        document.documentElement.dataset.sound = 'blocked';
+        return false;
+      } finally {
+        this._unlockPromise = null;
+      }
+    })();
+    return this._unlockPromise;
   }
 
   reset() {
@@ -53,30 +78,78 @@ export class CastSound {
   }
 
   launch(emotion, detail = {}, { duration = 0.6, pan = 0 } = {}) {
-    if (!this._ready()) return null;
     const noteStep = emotion === 0 ? this.yesStep++ : detail.holdStep || 0;
     const voice = { emotion, noteStep, id: this.voiceCount++ };
-    const now = this.ctx.currentTime;
-    this._pop(emotion, now, pan);
-    this._whoosh(emotion, now + 0.018, duration, pan, voice.id);
+    // 첫 입력이 오디오 준비보다 빠르더라도 버리지 않고, unlock 직후 재생한다.
+    this._playWhenReady(() => {
+      const now = this.ctx.currentTime;
+      this._pop(emotion, now, pan);
+      this._whoosh(emotion, now + 0.018, duration, pan, voice.id);
+    });
     return voice;
   }
 
   impact(emotion, voice) {
-    if (!this._ready()) return;
     const noteStep = voice?.noteStep || 0;
-    const now = this.ctx.currentTime;
-    this._glass(impactFrequency(emotion, noteStep), emotion, now);
-    this._thump(emotion, now);
+    this._playWhenReady(() => {
+      const now = this.ctx.currentTime;
+      this._glass(impactFrequency(emotion, noteStep), emotion, now);
+      this._thump(emotion, now);
+    });
   }
 
   releaseHold(noteStep = 0) {
-    if (!this._ready()) return;
-    const now = this.ctx.currentTime;
-    const base = impactFrequency(2, noteStep);
-    // 손을 떼면 작은 상행 두 음으로 에너지가 잠기는 느낌을 준다.
-    this._tone(base, now, 0.16, 0.018, 'sine');
-    this._tone(base * 1.5, now + 0.055, 0.28, 0.014, 'sine');
+    this._playWhenReady(() => {
+      const now = this.ctx.currentTime;
+      const base = impactFrequency(2, noteStep);
+      // 손을 떼면 작은 상행 두 음으로 에너지가 잠기는 느낌을 준다.
+      this._tone(base, now, 0.16, 0.018, 'sine');
+      this._tone(base * 1.5, now + 0.055, 0.28, 0.014, 'sine');
+    });
+  }
+
+  _createContext(AudioContextClass) {
+    this.ctx = new AudioContextClass();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.68;
+
+    const compressor = this.ctx.createDynamicsCompressor();
+    compressor.threshold.value = -18;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.004;
+    compressor.release.value = 0.16;
+    this.master.connect(compressor).connect(this.ctx.destination);
+    this.noise = this._makeNoiseBuffer();
+    if (typeof this.ctx.addEventListener === 'function') {
+      this.ctx.addEventListener('statechange', () => this._reportState());
+    }
+  }
+
+  _playWhenReady(play) {
+    if (this._ready()) {
+      play();
+      return;
+    }
+    this.unlock()
+      .then((ready) => {
+        if (ready) play();
+      })
+      .catch(() => {});
+  }
+
+  _primeContext() {
+    if (!this.ctx || !this.master || typeof this.ctx.createBufferSource !== 'function') return;
+    const source = this.ctx.createBufferSource();
+    source.buffer = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
+    source.connect(this.master);
+    source.start(0);
+  }
+
+  _reportState() {
+    if (typeof document !== 'undefined' && this.ctx) {
+      document.documentElement.dataset.sound = this.ctx.state;
+    }
   }
 
   _ready() {

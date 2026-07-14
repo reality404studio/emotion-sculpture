@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "verify": "node scripts/verify-determinism.mjs"
+    "verify": "node scripts/verify-determinism.mjs && node scripts/verify-sound.mjs"
   },
   "dependencies": {
     "@solana/web3.js": "1.98.4",

@@ -20,6 +20,7 @@ import { makeAdapter } from './onchain.js';
 import { seedSessions } from './seed-data.js';
 import { CastSound } from './sound.js';
 import { CinematicDirector } from './cinematic.js';
+import { FoundryAtmosphere } from './atmosphere.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
@@ -144,6 +145,9 @@ const stageRing = new THREE.Mesh(
 stageRing.rotation.x = Math.PI / 2;
 stageRing.position.y = 0.008;
 scene.add(stageRing);
+
+const atmosphere = new FoundryAtmosphere();
+scene.add(atmosphere.group);
 
 // 블룸 — 파티클과 주조선이 물리적으로 빛나게 (다크 스테이지 전제)
 const composer = new EffectComposer(renderer);
@@ -281,6 +285,7 @@ let liveProgress = 0;
 function startMatch() {
   if (phase !== 'idle') return;
   document.body.classList.remove('is-result');
+  atmosphere.reset();
   castSound.reset();
   // 시작 점화음으로 오디오 활성화를 즉시 확인한다. 준비 중 입력된 소리는 큐에 보존된다.
   castSound.wake();
@@ -339,6 +344,7 @@ async function endMatch() {
 
   // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
   sculpture.finishCast();
+  atmosphere.reveal();
   revealCamera();
   window.setTimeout(() => {
     if (phase !== 'result' || session !== finishingSession) return;
@@ -439,6 +445,7 @@ function showCastImpact(point, emo, soundVoice) {
   if (phase === 'live' && sculpture) {
     sculpture.impact(emo);
     cinematic.impact(emo, sculpture.castFrontY());
+    atmosphere.impact(sculpture.castFrontY());
   }
   castSound.impact(emo, soundVoice);
 }
@@ -562,6 +569,7 @@ function animate() {
   }
 
   if (sculpture) sculpture.update(now / 1000);
+  atmosphere.update(now / 1000);
   compareTrophies.forEach((t) => t.update(now / 1000));
   cinematic.update(dt / 1000, {
     progress: liveProgress,

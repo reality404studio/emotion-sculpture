@@ -47,11 +47,21 @@ const armCastAudio = () => castSound.unlock().catch(() => {});
 window.addEventListener('pointerdown', armCastAudio, { capture: true, passive: true });
 window.addEventListener('keydown', armCastAudio, { capture: true });
 
+const coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+const readViewport = () => ({
+  width: window.innerWidth,
+  height: window.innerHeight,
+  portrait: window.innerWidth <= 680 && window.innerHeight > window.innerWidth,
+  compact: window.innerWidth <= 900 || coarsePointer,
+});
+let viewport = readViewport();
+const renderPixelRatio = () => Math.min(window.devicePixelRatio || 1, viewport.compact ? 1.35 : 2);
+
 // ─────────────────────────────────────────────────────────────
 // 렌더러 / 씬 / 카메라 / 조명
 // ─────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(renderPixelRatio());
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -146,7 +156,7 @@ stageRing.rotation.x = Math.PI / 2;
 stageRing.position.y = 0.008;
 scene.add(stageRing);
 
-const atmosphere = new FoundryAtmosphere();
+const atmosphere = new FoundryAtmosphere({ density: viewport.compact ? 0.62 : 1 });
 scene.add(atmosphere.group);
 
 // 블룸 — 파티클과 주조선이 물리적으로 빛나게 (다크 스테이지 전제)
@@ -179,6 +189,12 @@ const cinematic = new CinematicDirector({
     sweep: sweepLight,
   },
 });
+cinematic.setViewport(viewport.width, viewport.height);
+cinematic.resetIdle(true);
+controls.enableZoom = !viewport.compact;
+controls.minDistance = viewport.compact ? 7.2 : 5.2;
+controls.maxDistance = viewport.compact ? 18 : 14;
+atmosphere.setPixelRatio(renderPixelRatio());
 
 // ─────────────────────────────────────────────────────────────
 // 상태
@@ -193,6 +209,7 @@ let ruler = null; // 결과 화면의 발광 시간 눈금자
 
 function installDormantTrophy() {
   sculpture = new Trophy(0x454d4f54);
+  sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
 }
 
@@ -297,6 +314,7 @@ function startMatch() {
     sculpture.dispose();
   }
   sculpture = new Trophy(sessionSeed(session));
+  sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
   // live 시간 매핑: 3분 = 트로피 전체 높이 (조기 종료 시 finishCast가 재정규화)
   sculpture.beginLive(Math.round(SESSION_MS / TICK_MS));
@@ -350,7 +368,7 @@ async function endMatch() {
     if (phase !== 'result' || session !== finishingSession) return;
     document.body.classList.remove('is-revealing');
     resultEl.hidden = false;
-    if (ruler) ruler.group.visible = true;
+    if (ruler) ruler.group.visible = !viewport.portrait;
   }, 2200);
 
   session.signatureHash = await computeSculptureHash(session);
@@ -693,17 +711,32 @@ function buildCompare() {
   compareGroup = new THREE.Group();
   compareTrophies = [];
   const seeds = seedSessions();
-  const gap = 2.8;
   seeds.forEach((s, i) => {
     const sc = new Trophy(1000 + i);
+    sc.setPixelRatio(renderPixelRatio());
     sc.setBeats(s.beats);
-    sc.group.position.x = i === 0 ? -gap : gap;
     // 같은 뼈대, 정반대의 상처 — 라이벌 트로피는 반대편을 보인다 (§6)
     if (i === 1) sc.group.rotation.y = Math.PI;
     compareGroup.add(sc.group);
     compareTrophies.push(sc);
   });
+  layoutCompareTrophies();
   scene.add(compareGroup);
+}
+
+function layoutCompareTrophies() {
+  const gap = viewport.portrait ? 1.5 : 2.8;
+  compareTrophies.forEach((trophy, i) => {
+    trophy.group.position.x = i === 0 ? -gap : gap;
+  });
+}
+
+function frameCompare() {
+  const portrait = viewport.portrait;
+  controls.target.set(0, portrait ? 2.1 : 2.0, 0);
+  camera.position.set(0, portrait ? 2.65 : 2.4, portrait ? 15.8 : 13.2);
+  camera.fov = portrait ? 46 : 42;
+  camera.updateProjectionMatrix();
 }
 
 $('#compare-btn').addEventListener('click', () => {
@@ -714,16 +747,13 @@ $('#compare-btn').addEventListener('click', () => {
   compareGroup.visible = true;
   compareBar.hidden = false;
   phase = 'compare';
-  controls.target.set(0, 2.0, 0);
-  camera.position.set(0, 2.4, 13.2);
-  camera.fov = 42;
-  camera.updateProjectionMatrix();
+  frameCompare();
   cinematic.enterCompare();
 });
 
 $('#compare-back').addEventListener('click', () => {
   if (compareGroup) compareGroup.visible = false;
-  if (ruler) ruler.group.visible = true;
+  if (ruler) ruler.group.visible = !viewport.portrait;
   if (sculpture) sculpture.group.visible = true;
   compareBar.hidden = true;
   resultEl.hidden = false;
@@ -816,12 +846,31 @@ $('#yt-url').addEventListener('keydown', (e) => {
 startBtn.addEventListener('click', startMatch);
 endBtn.addEventListener('click', endMatch);
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+function applyViewportLayout() {
+  viewport = readViewport();
+  const pixelRatio = renderPixelRatio();
+  camera.aspect = viewport.width / viewport.height;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  composer.setSize(window.innerWidth, window.innerHeight);
-});
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(viewport.width, viewport.height);
+  if (typeof composer.setPixelRatio === 'function') composer.setPixelRatio(pixelRatio);
+  composer.setSize(viewport.width, viewport.height);
+  cinematic.setViewport(viewport.width, viewport.height);
+  controls.enableZoom = !viewport.compact;
+  controls.minDistance = viewport.compact ? 7.2 : 5.2;
+  controls.maxDistance = viewport.compact ? 18 : 14;
+  atmosphere.setPixelRatio(pixelRatio);
+  if (sculpture) sculpture.setPixelRatio(pixelRatio);
+  compareTrophies.forEach((trophy) => trophy.setPixelRatio(pixelRatio));
+  layoutCompareTrophies();
+
+  if (ruler) ruler.group.visible = phase === 'result' && !viewport.portrait;
+  if (phase === 'idle') cinematic.resetIdle(true);
+  else if (phase === 'result') cinematic.showResult(true);
+  else if (phase === 'compare') frameCompare();
+}
+
+window.addEventListener('resize', applyViewportLayout);
 
 // Space가 페이지 스크롤/버튼 클릭 트리거하지 않도록
 window.addEventListener('keydown', (e) => {

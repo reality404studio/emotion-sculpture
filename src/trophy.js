@@ -441,6 +441,10 @@ export class Trophy {
     this._liveE = liveE.slice();
   }
 
+  setPixelRatio(value) {
+    this._uniforms.uPixelRatio.value = value;
+  }
+
   // 마우스 휘휘 — 포인터 지점(로컬 좌표) 주변 입자를 소용돌이로 젓는다
   stir(localPoint, amount) {
     this._uniforms.uPointer.value.copy(localPoint);

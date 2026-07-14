@@ -130,5 +130,12 @@ export class InputController {
       const k = ev.key.toLowerCase();
       if (KEY_MAP[k] === 2) this.holdPleaseEnd();
     });
+    // 전화 수신·앱 전환·화면 회전 중 포인터가 사라져도 홀드가 계속 남지 않게 한다.
+    window.addEventListener('blur', () => this.holdPleaseEnd());
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) this.holdPleaseEnd();
+      });
+    }
   }
 }

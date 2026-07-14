@@ -1,10 +1,6 @@
 import * as THREE from 'three';
 
-const AMBIENT_COUNT = 1400;
-const BEAM_COUNT = 750;
-const RESIDUE_COUNT = 500;
-const HAZE_COUNT = 260;
-const TOTAL = AMBIENT_COUNT + BEAM_COUNT + RESIDUE_COUNT + HAZE_COUNT;
+const BASE_COUNTS = { ambient: 1400, beam: 750, residue: 500, haze: 260 };
 
 function makeRandom(seed = 0x46554e44) {
   let state = seed >>> 0;
@@ -69,14 +65,20 @@ const FRAGMENT = /* glsl */ `
 `;
 
 export class FoundryAtmosphere {
-  constructor() {
+  constructor({ density = 1 } = {}) {
+    const quality = Math.max(0.45, Math.min(1, density));
+    const ambientCount = Math.round(BASE_COUNTS.ambient * quality);
+    const beamCount = Math.round(BASE_COUNTS.beam * quality);
+    const residueCount = Math.round(BASE_COUNTS.residue * quality);
+    const hazeCount = Math.round(BASE_COUNTS.haze * quality);
+    const total = ambientCount + beamCount + residueCount + hazeCount;
     const random = makeRandom();
-    const positions = new Float32Array(TOTAL * 3);
-    const phases = new Float32Array(TOTAL);
-    const sizes = new Float32Array(TOTAL);
-    const layers = new Float32Array(TOTAL);
-    const drifts = new Float32Array(TOTAL);
-    const colors = new Float32Array(TOTAL * 3);
+    const positions = new Float32Array(total * 3);
+    const phases = new Float32Array(total);
+    const sizes = new Float32Array(total);
+    const layers = new Float32Array(total);
+    const drifts = new Float32Array(total);
+    const colors = new Float32Array(total * 3);
     const ambientColor = new THREE.Color(0x77746d);
     const beamColor = new THREE.Color(0xc8c1af);
     const residueColor = new THREE.Color(0x65709a);
@@ -94,7 +96,7 @@ export class FoundryAtmosphere {
 
     let cursor = 0;
     // 전역층: 카메라가 움직일 때 가까운 입자가 조금 더 빨리 지나가 깊이를 만든다.
-    for (let i = 0; i < AMBIENT_COUNT; i++, cursor++) {
+    for (let i = 0; i < ambientCount; i++, cursor++) {
       const x = (random() * 2 - 1) * 8.2;
       const y = 0.05 + random() * 7.1;
       const z = -5.2 + random() * 11.6;
@@ -102,7 +104,7 @@ export class FoundryAtmosphere {
     }
 
     // 광선층: 좌측 상단에서 트로피 뒤로 내려오는 사선 빛 속에서만 밝아지는 먼지.
-    for (let i = 0; i < BEAM_COUNT; i++, cursor++) {
+    for (let i = 0; i < beamCount; i++, cursor++) {
       const t = random();
       const spread = 0.18 + (1 - t) * 0.72;
       const x = -3.25 + t * 3.45 + (random() * 2 - 1) * spread;
@@ -112,7 +114,7 @@ export class FoundryAtmosphere {
     }
 
     // 잔여층: 받침대 가까이에는 더 무겁고 푸른 재가 낮게 머문다.
-    for (let i = 0; i < RESIDUE_COUNT; i++, cursor++) {
+    for (let i = 0; i < residueCount; i++, cursor++) {
       const angle = random() * Math.PI * 2;
       const radius = 0.55 + Math.sqrt(random()) * 2.65;
       const x = Math.cos(angle) * radius;
@@ -123,7 +125,7 @@ export class FoundryAtmosphere {
 
     // 전경 아지랑이: 큰 입자를 초점 밖에 두어 화면 전체가 고르게 숨 쉬게 한다.
     // 작은 별처럼 보이지 않도록 매우 낮은 알파와 넓은 소프트 폴오프만 사용한다.
-    for (let i = 0; i < HAZE_COUNT; i++, cursor++) {
+    for (let i = 0; i < hazeCount; i++, cursor++) {
       const x = (random() * 2 - 1) * 8.8;
       const y = -0.2 + random() * 7.8;
       const z = -1.0 + random() * 7.2;
@@ -168,6 +170,10 @@ export class FoundryAtmosphere {
     this.uniforms.uImpactAge.value = 99;
     this._reveal = 0;
     this.uniforms.uReveal.value = 0;
+  }
+
+  setPixelRatio(value) {
+    this.uniforms.uPixelRatio.value = value;
   }
 
   impact(worldY) {

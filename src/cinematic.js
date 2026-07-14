@@ -39,8 +39,15 @@ export class CinematicDirector {
     this.liveTarget = new THREE.Vector3();
     this.heroPos = new THREE.Vector3();
     this.heroTarget = new THREE.Vector3();
+    this.viewport = { compact: false, portrait: false, landscape: false };
 
     this.resetIdle(true);
+  }
+
+  setViewport(width, height) {
+    this.viewport.compact = width <= 900;
+    this.viewport.portrait = width <= 680 && height > width;
+    this.viewport.landscape = height <= 520 && width > height;
   }
 
   resetIdle(instant = false) {
@@ -51,12 +58,15 @@ export class CinematicDirector {
     this.impactAge = 99;
     this.controls.enabled = false;
     this.controls.autoRotate = false;
-    this.goalPos.set(3.0, 2.15, 7.85);
-    this.goalTarget.set(0, 2.2, 0);
+    const portrait = this.viewport.portrait;
+    const angle = portrait ? 0.16 : 0.36;
+    const distance = portrait ? 9.45 : 8.4;
+    this.goalPos.set(Math.sin(angle) * distance, portrait ? 2.65 : 2.15, Math.cos(angle) * distance);
+    this.goalTarget.set(0, portrait ? 2.55 : 2.2, 0);
     if (instant) {
       this.camera.position.copy(this.goalPos);
       this.controls.target.copy(this.goalTarget);
-      this.camera.fov = 40;
+      this.camera.fov = portrait ? 43 : 40;
       this.camera.updateProjectionMatrix();
     }
     this._setLightTargets('idle', 1);
@@ -92,18 +102,20 @@ export class CinematicDirector {
   showResult(instant = true) {
     this.mode = 'result';
     this.age = 0;
-    const angle = 0.3;
-    this.goalTarget.set(0, this.totalHeight * 0.49, 0);
-    this.goalPos.set(Math.sin(angle) * 8.15, this.totalHeight * 0.58, Math.cos(angle) * 8.15);
+    const portrait = this.viewport.portrait;
+    const angle = portrait ? 0.16 : 0.3;
+    const distance = portrait ? 9.8 : 8.15;
+    this.goalTarget.set(0, portrait ? 1.68 : this.totalHeight * 0.49, 0);
+    this.goalPos.set(Math.sin(angle) * distance, portrait ? 2.25 : this.totalHeight * 0.58, Math.cos(angle) * distance);
     if (instant) {
       this.camera.position.copy(this.goalPos);
       this.controls.target.copy(this.goalTarget);
-      this.camera.fov = 37;
+      this.camera.fov = portrait ? 42 : 37;
       this.camera.updateProjectionMatrix();
     }
     this.controls.enabled = true;
     this.controls.autoRotate = true;
-    this.controls.autoRotateSpeed = 0.55;
+    this.controls.autoRotateSpeed = portrait ? 0.34 : 0.55;
     this._setLightTargets('result', 1);
   }
 
@@ -133,10 +145,13 @@ export class CinematicDirector {
 
   _updateIdle(dt) {
     // 멈춘 화면이 아니라 숨을 참고 있는 듯한 4° 이내의 아주 느린 드리프트.
-    const angle = 0.36 + Math.sin(this.age * 0.14) * 0.022;
-    this.goalPos.set(Math.sin(angle) * 8.4, 2.15, Math.cos(angle) * 8.4);
-    this.goalTarget.set(0, 2.2, 0);
-    this._moveCamera(dt, 40, 1.1);
+    const portrait = this.viewport.portrait;
+    const baseAngle = portrait ? 0.16 : 0.36;
+    const angle = baseAngle + Math.sin(this.age * 0.14) * (portrait ? 0.014 : 0.022);
+    const distance = portrait ? 9.45 : 8.4;
+    this.goalPos.set(Math.sin(angle) * distance, portrait ? 2.65 : 2.15, Math.cos(angle) * distance);
+    this.goalTarget.set(0, portrait ? 2.55 : 2.2, 0);
+    this._moveCamera(dt, portrait ? 43 : 40, 1.1);
     this._setLightTargets('idle', dt);
   }
 
@@ -147,19 +162,20 @@ export class CinematicDirector {
     }
 
     const intro = ease(this.age / 1.15);
-    const angle = 0.22 - progress * 0.32;
-    let distance = 8.45 + progress * 0.4;
+    const portrait = this.viewport.portrait;
+    const angle = (portrait ? 0.1 : 0.22) - progress * (portrait ? 0.18 : 0.32);
+    let distance = (portrait ? 9.2 : 8.45) + progress * (portrait ? 0.3 : 0.4);
     // 주조선을 추적하되 몰드 전체는 프레임 안에 둔다. 형상이 자라는 과정이 먼저 읽혀야 한다.
-    let targetY = 2.2 + (castY - this.baseHeight) * 0.08;
+    let targetY = (portrait ? 2.28 : 2.2) + (castY - this.baseHeight) * (portrait ? 0.055 : 0.08);
     const builtCenter = (this.baseHeight + castY) * 0.5;
     const milestonePulse = this.milestoneAge < 1.05 ? Math.sin((this.milestoneAge / 1.05) * Math.PI) : 0;
-    distance += milestonePulse * 2.0;
-    targetY += (builtCenter - targetY) * milestonePulse * 0.72;
+    distance += milestonePulse * (portrait ? 1.1 : 2.0);
+    targetY += (builtCenter - targetY) * milestonePulse * (portrait ? 0.38 : 0.72);
 
     this.livePos.set(Math.sin(angle) * distance, targetY + 0.34, Math.cos(angle) * distance);
     this.liveTarget.set(0, targetY, 0);
-    this.goalPos.set(1.7, 2.42, 8.15).lerp(this.livePos, intro);
-    this.goalTarget.set(0, 2.15, 0).lerp(this.liveTarget, intro);
+    this.goalPos.set(portrait ? 0.85 : 1.7, portrait ? 2.62 : 2.42, portrait ? 8.9 : 8.15).lerp(this.livePos, intro);
+    this.goalTarget.set(0, portrait ? 2.3 : 2.15, 0).lerp(this.liveTarget, intro);
 
     // 충돌 프레임에만 작은 반동. 이동 중에는 카메라를 흔들지 않는다.
     if (this.impactAge < 0.75 && this.impactStrength > 0.01) {
@@ -167,24 +183,27 @@ export class CinematicDirector {
       const kick = Math.sin(this.impactAge * 22) * envelope;
       this.view.subVectors(this.goalTarget, this.goalPos).normalize();
       this.tangent.crossVectors(this.view, UP).normalize();
-      if (this.impactEmotion === 0) this.goalPos.addScaledVector(this.view, kick * 0.18);
-      else if (this.impactEmotion === 1) this.goalPos.addScaledVector(this.tangent, kick * 0.12);
-      else this.goalPos.y += envelope * 0.065;
+      const motionScale = this.viewport.compact ? 0.58 : 1;
+      if (this.impactEmotion === 0) this.goalPos.addScaledVector(this.view, kick * 0.18 * motionScale);
+      else if (this.impactEmotion === 1) this.goalPos.addScaledVector(this.tangent, kick * 0.12 * motionScale);
+      else this.goalPos.y += envelope * 0.065 * motionScale;
     }
 
-    this._moveCamera(dt, 39.5 - milestonePulse * 1.2, 5.4);
+    this._moveCamera(dt, (portrait ? 43 : 39.5) - milestonePulse * (portrait ? 0.6 : 1.2), 5.4);
     this.lights.casting.position.set(1.15, castY + 0.22, 1.85);
     this._setLightTargets('live', dt);
   }
 
   _updateReveal(dt) {
     const t = ease(this.age / 2.05);
-    const angle = 0.3;
-    this.heroTarget.set(0, this.totalHeight * 0.49, 0);
-    this.heroPos.set(Math.sin(angle) * 8.15, this.totalHeight * 0.58, Math.cos(angle) * 8.15);
+    const portrait = this.viewport.portrait;
+    const angle = portrait ? 0.16 : 0.3;
+    const distance = portrait ? 9.8 : 8.15;
+    this.heroTarget.set(0, portrait ? 1.68 : this.totalHeight * 0.49, 0);
+    this.heroPos.set(Math.sin(angle) * distance, portrait ? 2.25 : this.totalHeight * 0.58, Math.cos(angle) * distance);
     this.goalPos.lerpVectors(this.revealFromPos, this.heroPos, t);
     this.goalTarget.lerpVectors(this.revealFromTarget, this.heroTarget, t);
-    this._moveCamera(dt, 37, 8.0);
+    this._moveCamera(dt, portrait ? 42 : 37, 8.0);
 
     const dark = this.age < 0.16
       ? 1 - ease(this.age / 0.16) * 0.82
@@ -224,6 +243,7 @@ export class CinematicDirector {
       this.lights[name].intensity += (target - this.lights[name].intensity) * k;
     }
     this.renderer.toneMappingExposure += (targets.exposure * scale - this.renderer.toneMappingExposure) * k;
-    this.bloomPass.strength += (targets.bloom * scale - this.bloomPass.strength) * k;
+    const bloomScale = this.viewport.compact ? 0.76 : 1;
+    this.bloomPass.strength += (targets.bloom * bloomScale * scale - this.bloomPass.strength) * k;
   }
 }

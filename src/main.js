@@ -18,6 +18,7 @@ import {
 } from './session.js';
 import { makeAdapter } from './onchain.js';
 import { seedSessions } from './seed-data.js';
+import { CastSound } from './sound.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
@@ -35,6 +36,7 @@ const compareBar = $('#compare-bar');
 const castFeedback = $('#cast-feedback');
 
 const CAST_COLORS = ['#f5a524', '#e4573d', '#3b82f6'];
+const castSound = new CastSound();
 
 // ─────────────────────────────────────────────────────────────
 // 렌더러 / 씬 / 카메라 / 조명
@@ -201,6 +203,9 @@ let elapsed = 0;
 // Phase: 시작
 // ─────────────────────────────────────────────────────────────
 function startMatch() {
+  castSound.reset();
+  // Start 버튼의 사용자 제스처 안에서 잠금을 해제한다. 거절돼도 화면 경험은 그대로 유지한다.
+  castSound.unlock().catch(() => {});
   session = createSession();
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
   session.stats = { yesTaps: 0, noTaps: 0, holdMs: 0 };
@@ -216,6 +221,7 @@ function startMatch() {
       if (emo === 0) session.stats.yesTaps++;
       if (emo === 1) session.stats.noTaps++;
     },
+    onHoldEnd: (holdStep) => castSound.releaseHold(holdStep),
   });
   input.enable();
 
@@ -335,7 +341,7 @@ function castTargetScreen(lift = 0) {
   };
 }
 
-function showCastImpact(point, emo) {
+function showCastImpact(point, emo, soundVoice) {
   const impact = document.createElement('span');
   impact.className = `cast-impact cast-impact--${emo}`;
   impact.style.setProperty('--cast-color', CAST_COLORS[emo]);
@@ -348,6 +354,7 @@ function showCastImpact(point, emo) {
   });
 
   if (phase === 'live' && sculpture) sculpture.impact(emo);
+  castSound.impact(emo, soundVoice);
 }
 
 function launchCastParticle(emo, detail = {}) {
@@ -372,6 +379,8 @@ function launchCastParticle(emo, detail = {}) {
   const bornAt = performance.now();
   // HOLD 재료는 1초 안에도 착지점이 눈에 띄게 상승한다. 한 번의 홀드가 끝나면 0부터 다시 시작한다.
   const targetLift = emo === 2 ? Math.min(1.15, (detail.holdStep || 0) * 0.16) : 0;
+  const sourcePan = clampScreenPan(start.x);
+  const soundVoice = castSound.launch(emo, detail, { duration: duration / 1000, pan: sourcePan });
 
   function fly(now) {
     if (!orb.isConnected) return;
@@ -399,10 +408,14 @@ function launchCastParticle(emo, detail = {}) {
     }
 
     orb.remove();
-    if (phase === 'live') showCastImpact(target, emo);
+    if (phase === 'live') showCastImpact(target, emo, soundVoice);
   }
 
   requestAnimationFrame(fly);
+}
+
+function clampScreenPan(x) {
+  return Math.max(-0.78, Math.min(0.78, (x / window.innerWidth) * 2 - 1));
 }
 
 // 팔레트 입력 배선 (마우스/터치 + 키보드는 InputController 내부)

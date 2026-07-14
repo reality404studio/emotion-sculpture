@@ -19,7 +19,7 @@ import {
 const KEY_MAP = { j: 0, f: 1, ' ': 2 };
 
 export class InputController {
-  constructor({ onVisualPulse } = {}) {
+  constructor({ onVisualPulse, onHoldEnd } = {}) {
     this.intensities = [BASELINE, BASELINE, BASELINE];
     this.holding = false; // 제발! 홀드 상태
     this.liveKind = 'quiet';
@@ -29,6 +29,7 @@ export class InputController {
     this._holdVisualTimer = null;
     this._holdPulseCount = 0;
     this.onVisualPulse = onVisualPulse || (() => {});
+    this.onHoldEnd = onHoldEnd || (() => {});
     this.enabled = false;
     this._bound = false;
   }
@@ -75,8 +76,10 @@ export class InputController {
     }
   }
   holdPleaseEnd() {
+    const wasHolding = this.holding;
     this.holding = false;
     this._stopHoldVisuals();
+    if (wasHolding) this.onHoldEnd(this._holdPulseCount);
   }
 
   _stopHoldVisuals() {

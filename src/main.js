@@ -19,6 +19,7 @@ import {
 import { makeAdapter } from './onchain.js';
 import { seedSessions } from './seed-data.js';
 import { CastSound } from './sound.js';
+import { CinematicDirector } from './cinematic.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
@@ -62,33 +63,58 @@ camera.position.set(0, 2.3, 8.4);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.autoRotate = true;
-controls.autoRotateSpeed = 0.6;
+controls.enablePan = false;
+controls.minDistance = 5.2;
+controls.maxDistance = 14;
+controls.autoRotate = false;
 controls.target.set(0, 2.05, 0);
 
-// 야간 스타디움 조명 — 받침대를 세워줄 만큼만, 파티클 발광이 주인공
-scene.add(new THREE.HemisphereLight(0x8fa3ff, 0x10131f, 0.55));
-const key = new THREE.DirectionalLight(0xfff2dd, 1.15);
-key.position.set(5, 10, 7);
+// 어두운 주조 의식 — 차가운 윤곽 위를 따뜻한 주조광이 올라간다.
+const ambient = new THREE.HemisphereLight(0x7188d8, 0x080b13, 0.13);
+scene.add(ambient);
+
+const key = new THREE.DirectionalLight(0xffe0b0, 0.24);
+key.position.set(4.8, 8.5, 6.2);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
-scene.add(key);
-const rim = new THREE.PointLight(0x5a78ff, 1.6, 36);
-rim.position.set(-6, 5, -6);
-scene.add(rim);
-const warm = new THREE.PointLight(0xffa54d, 1.2, 28);
-warm.position.set(5, 2, 4);
-scene.add(warm);
+key.target.position.set(0, 2, 0);
+
+const rim = new THREE.DirectionalLight(0x7695ff, 1.8);
+rim.position.set(-5.5, 6.5, -6.5);
+rim.target.position.set(0, 2.2, 0);
+
+const fill = new THREE.PointLight(0xffb66b, 0.08, 18, 2);
+fill.position.set(4.2, 2.5, 4.4);
+
+const stage = new THREE.SpotLight(0xffd29a, 0.75, 18, 0.36, 0.9, 1.5);
+stage.position.set(0, 7.5, 3.5);
+stage.target.position.set(0, 0.15, 0);
+
+const casting = new THREE.PointLight(0xff9d35, 0, 4.6, 2);
+const impactLight = new THREE.PointLight(0xffffff, 0, 2.8, 2);
+const sweepLight = new THREE.PointLight(0xffe5ba, 0, 8.5, 1.6);
+scene.add(
+  key,
+  key.target,
+  rim,
+  rim.target,
+  fill,
+  stage,
+  stage.target,
+  casting,
+  impactLight,
+  sweepLight
+);
 
 // 야간 피치 — 잔디 그린 바닥 + 은은한 후광
 const floor = new THREE.Mesh(
   new THREE.CircleGeometry(10, 96),
   new THREE.MeshStandardMaterial({
-    color: 0x1e5c2e,
+    color: 0x12391e,
     roughness: 0.88,
     metalness: 0.02,
     emissive: new THREE.Color(0x0a2e12),
-    emissiveIntensity: 0.3,
+    emissiveIntensity: 0.14,
   })
 );
 floor.rotation.x = -Math.PI / 2;
@@ -107,6 +133,25 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
+
+const cinematic = new CinematicDirector({
+  camera,
+  controls,
+  renderer,
+  bloomPass,
+  baseHeight: BASE_H,
+  totalHeight: BASE_H + GLASS_H,
+  lights: {
+    ambient,
+    key,
+    rim,
+    fill,
+    stage,
+    casting,
+    impact: impactLight,
+    sweep: sweepLight,
+  },
+});
 
 // ─────────────────────────────────────────────────────────────
 // 상태
@@ -198,6 +243,7 @@ function buildRuler(durationMs) {
 let acc = 0;
 let last = performance.now();
 let elapsed = 0;
+let liveProgress = 0;
 
 // ─────────────────────────────────────────────────────────────
 // Phase: 시작
@@ -227,6 +273,7 @@ function startMatch() {
 
   phase = 'live';
   elapsed = 0;
+  liveProgress = 0;
   acc = 0;
   last = performance.now();
 
@@ -236,10 +283,8 @@ function startMatch() {
   resultEl.hidden = true;
   phaseTag.textContent = 'Casting — pour your emotions';
   document.body.classList.add('is-live');
-  // 주조는 받침대에서 시작 — 카메라는 주조선을 따라 천천히 올라간다 (§4)
-  controls.target.set(0, 1.0, 0);
-  camera.position.set(0, 1.5, 6.6);
-  controls.autoRotateSpeed = 0.6;
+  // 점화 클로즈업에서 시작해 주조선과 함께 올라가는 카메라·조명 시퀀스.
+  cinematic.beginLive();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -248,12 +293,22 @@ function startMatch() {
 async function endMatch() {
   if (phase !== 'live') return;
   phase = 'result';
+  const finishingSession = session;
   input.disable();
   castFeedback.replaceChildren();
   session.endedAt = Date.now();
+  resultEl.hidden = true;
+  document.body.classList.add('is-revealing');
 
   // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
   sculpture.finishCast();
+  revealCamera();
+  window.setTimeout(() => {
+    if (phase !== 'result' || session !== finishingSession) return;
+    document.body.classList.remove('is-revealing');
+    resultEl.hidden = false;
+    if (ruler) ruler.group.visible = true;
+  }, 2200);
 
   session.signatureHash = await computeSculptureHash(session);
   saveSession(session);
@@ -268,14 +323,11 @@ async function endMatch() {
   $('#mint-status').textContent = '';
   $('#mint-result').hidden = true;
   fillReport(elapsed);
-  resultEl.hidden = false;
 
   // 시간 눈금자 — 이 세션의 실제 기록 길이에 맞춰 생성
   if (ruler) ruler.dispose();
   ruler = buildRuler(elapsed);
-
-  // 카메라가 멀어지며 전체 조각이 드러난다 (부록2, step 4)
-  revealCamera();
+  ruler.group.visible = false;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -305,15 +357,8 @@ function fillReport(durationMs) {
 }
 
 function revealCamera() {
-  // 풀백 — 트로피 전체가 화면 높이의 70~80%를 차지하도록 (§2.1)
-  const h = sculpture.height;
-  controls.target.set(0, h * 0.47, 0);
-  const dist = Math.max(7.4, h * 1.95);
-  const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-  dir.y = Math.min(dir.y, 0.18); // 위에서 내려다보지 않고 정면 높이에서
-  dir.normalize();
-  camera.position.copy(controls.target).addScaledVector(dir, dist);
-  controls.autoRotateSpeed = 1.0;
+  // 짧은 암전 → 아래에서 위로 훑는 광선 → 전체 형상을 드러내는 히어로 풀백.
+  cinematic.finish();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -353,7 +398,10 @@ function showCastImpact(point, emo, soundVoice) {
     if (ev.target === impact) impact.remove();
   });
 
-  if (phase === 'live' && sculpture) sculpture.impact(emo);
+  if (phase === 'live' && sculpture) {
+    sculpture.impact(emo);
+    cinematic.impact(emo, sculpture.castFrontY());
+  }
   castSound.impact(emo, soundVoice);
 }
 
@@ -469,17 +517,18 @@ function animate() {
       tick();
     }
     const p = Math.min(1, elapsed / SESSION_MS);
+    liveProgress = p;
     sculpture.setCastProgress(p);
-
-    // 카메라는 주조선을 화면 상단 1/3에 두고 아주 느리게 상승 (§4)
-    const targetY = Math.max(1.0, sculpture.castFrontY() - 0.55);
-    controls.target.y += (targetY - controls.target.y) * 0.02;
 
     if (elapsed >= SESSION_MS) endMatch();
   }
 
   if (sculpture) sculpture.update(now / 1000);
   compareTrophies.forEach((t) => t.update(now / 1000));
+  cinematic.update(dt / 1000, {
+    progress: liveProgress,
+    castY: sculpture ? sculpture.castFrontY() : BASE_H,
+  });
   // 눈금자는 항상 화면 오른쪽에 보이도록 카메라 방위각을 따라 돈다
   if (ruler && ruler.group.visible) {
     ruler.group.rotation.y = Math.atan2(camera.position.x, camera.position.z);
@@ -587,7 +636,9 @@ $('#compare-btn').addEventListener('click', () => {
   phase = 'compare';
   controls.target.set(0, 2.0, 0);
   camera.position.set(0, 2.4, 13.2);
-  controls.autoRotateSpeed = 0.8;
+  camera.fov = 42;
+  camera.updateProjectionMatrix();
+  cinematic.enterCompare();
 });
 
 $('#compare-back').addEventListener('click', () => {
@@ -597,7 +648,7 @@ $('#compare-back').addEventListener('click', () => {
   compareBar.hidden = true;
   resultEl.hidden = false;
   phase = 'result';
-  revealCamera();
+  cinematic.showResult(true);
 });
 
 $('#replay-btn').addEventListener('click', () => {
@@ -612,10 +663,10 @@ $('#replay-btn').addEventListener('click', () => {
   resultEl.hidden = true;
   castFeedback.replaceChildren();
   phase = 'idle';
+  liveProgress = 0;
   startBtn.hidden = false;
   phaseTag.textContent = 'Before kickoff';
-  controls.target.set(0, 2.05, 0);
-  camera.position.set(0, 2.3, 8.4);
+  cinematic.resetIdle(true);
   document.body.classList.remove('is-live');
 });
 

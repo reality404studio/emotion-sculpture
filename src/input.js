@@ -26,6 +26,8 @@ export class InputController {
     // 이 tick 동안 발생한 이벤트 누적(질감 kind 판정용)
     this._tapCount = 0;
     this._singleFired = false;
+    this._holdVisualTimer = null;
+    this._holdPulseCount = 0;
     this.onVisualPulse = onVisualPulse || (() => {});
     this.enabled = false;
     this._bound = false;
@@ -38,6 +40,7 @@ export class InputController {
   disable() {
     this.enabled = false;
     this.holding = false;
+    this._stopHoldVisuals();
   }
 
   // ── 개별 감정 입력 ──
@@ -56,13 +59,31 @@ export class InputController {
     this.onVisualPulse(1);
   }
   holdPleaseStart() {
-    if (!this.enabled) return;
+    if (!this.enabled || this.holding) return;
     this.holding = true;
     this.liveKind = 'hold';
-    this.onVisualPulse(2);
+    this._holdPulseCount = 0;
+    this.onVisualPulse(2, { holdStep: this._holdPulseCount });
+    // 홀드는 결과를 기다리는 입력이 아니라, 누르는 동안 계속 재료를 밀어 올리는 입력이다.
+    if (typeof window !== 'undefined') {
+      this._holdVisualTimer = window.setInterval(() => {
+        if (this.enabled && this.holding) {
+          this._holdPulseCount++;
+          this.onVisualPulse(2, { holdStep: this._holdPulseCount });
+        }
+      }, 320);
+    }
   }
   holdPleaseEnd() {
     this.holding = false;
+    this._stopHoldVisuals();
+  }
+
+  _stopHoldVisuals() {
+    if (this._holdVisualTimer !== null && typeof window !== 'undefined') {
+      window.clearInterval(this._holdVisualTimer);
+    }
+    this._holdVisualTimer = null;
   }
 
   // ── tick: 감쇠 → 홀드 적용 → 스냅샷 + kind ──

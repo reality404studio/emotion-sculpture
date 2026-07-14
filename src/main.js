@@ -32,6 +32,9 @@ const palette = $('#palette');
 const phaseTag = $('#phase-tag');
 const resultEl = $('#result');
 const compareBar = $('#compare-bar');
+const castFeedback = $('#cast-feedback');
+
+const CAST_COLORS = ['#f5a524', '#e4573d', '#3b82f6'];
 
 // ─────────────────────────────────────────────────────────────
 // 렌더러 / 씬 / 카메라 / 조명
@@ -207,9 +210,9 @@ function startMatch() {
   sculpture.beginLive(Math.round(SESSION_MS / TICK_MS));
 
   input = new InputController({
-    onVisualPulse: (emo) => {
+    onVisualPulse: (emo, detail) => {
       flashButton(emo);
-      if (sculpture) sculpture.pulse(emo);
+      launchCastParticle(emo, detail);
       if (emo === 0) session.stats.yesTaps++;
       if (emo === 1) session.stats.noTaps++;
     },
@@ -240,6 +243,7 @@ async function endMatch() {
   if (phase !== 'live') return;
   phase = 'result';
   input.disable();
+  castFeedback.replaceChildren();
   session.endedAt = Date.now();
 
   // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
@@ -316,6 +320,91 @@ function flashButton(emo) {
   setTimeout(() => btn.classList.remove('flash'), 240);
 }
 
+// ─────────────────────────────────────────────────────────────
+// 입력 인과 사슬 — 버튼에서 태어난 빛 조각이 실제 3D 주조선까지 날아간 뒤 충돌한다.
+// 버튼 반응과 트로피 반응을 같은 프레임에 터뜨리지 않고, 이동 시간을 사이에 둔다.
+// ─────────────────────────────────────────────────────────────
+function castTargetScreen(lift = 0) {
+  if (!sculpture) return { x: window.innerWidth / 2, y: window.innerHeight * 0.48 };
+  const local = new THREE.Vector3(0, sculpture.castFrontY() + 0.08 + lift, 0);
+  const world = sculpture.group.localToWorld(local);
+  const ndc = world.project(camera);
+  return {
+    x: (ndc.x * 0.5 + 0.5) * window.innerWidth,
+    y: (-ndc.y * 0.5 + 0.5) * window.innerHeight,
+  };
+}
+
+function showCastImpact(point, emo) {
+  const impact = document.createElement('span');
+  impact.className = `cast-impact cast-impact--${emo}`;
+  impact.style.setProperty('--cast-color', CAST_COLORS[emo]);
+  impact.style.left = `${point.x}px`;
+  impact.style.top = `${point.y}px`;
+  impact.innerHTML = '<i></i><b>✦</b>';
+  castFeedback.appendChild(impact);
+  impact.addEventListener('animationend', (ev) => {
+    if (ev.target === impact) impact.remove();
+  });
+
+  if (phase === 'live' && sculpture) sculpture.impact(emo);
+}
+
+function launchCastParticle(emo, detail = {}) {
+  if (phase !== 'live' || !sculpture) return;
+  const btn = palette.querySelector(`[data-emo="${emo}"]`);
+  if (!btn) return;
+
+  const rect = btn.getBoundingClientRect();
+  const start = { x: rect.left + rect.width / 2, y: rect.top + 8 };
+  const orb = document.createElement('span');
+  orb.className = `cast-orb cast-orb--${emo}`;
+  orb.style.setProperty('--cast-color', CAST_COLORS[emo]);
+  orb.innerHTML = '<i></i>';
+  castFeedback.appendChild(orb);
+
+  btn.classList.add('sending');
+  window.clearTimeout(btn._sendingTimer);
+  btn._sendingTimer = window.setTimeout(() => btn.classList.remove('sending'), 420);
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const duration = reduceMotion ? 240 : emo === 2 ? 500 : 620;
+  const bornAt = performance.now();
+  // HOLD 재료는 1초 안에도 착지점이 눈에 띄게 상승한다. 한 번의 홀드가 끝나면 0부터 다시 시작한다.
+  const targetLift = emo === 2 ? Math.min(1.15, (detail.holdStep || 0) * 0.16) : 0;
+
+  function fly(now) {
+    if (!orb.isConnected) return;
+    const raw = Math.min(1, (now - bornAt) / duration);
+    const t = 1 - Math.pow(1 - raw, 3);
+    const target = castTargetScreen(targetLift);
+    const control = {
+      x: start.x + (target.x - start.x) * 0.34,
+      y: Math.min(start.y, target.y) - (reduceMotion ? 24 : 112),
+    };
+    const omt = 1 - t;
+    const x = omt * omt * start.x + 2 * omt * t * control.x + t * t * target.x;
+    const y = omt * omt * start.y + 2 * omt * t * control.y + t * t * target.y;
+    const dx = 2 * omt * (control.x - start.x) + 2 * t * (target.x - control.x);
+    const dy = 2 * omt * (control.y - start.y) + 2 * t * (target.y - control.y);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    const scale = 0.72 + Math.sin(Math.PI * raw) * 0.5 + raw * 0.18;
+
+    orb.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${angle}deg) scale(${scale})`;
+    orb.style.opacity = String(Math.min(1, raw * 8));
+
+    if (raw < 1 && phase === 'live') {
+      requestAnimationFrame(fly);
+      return;
+    }
+
+    orb.remove();
+    if (phase === 'live') showCastImpact(target, emo);
+  }
+
+  requestAnimationFrame(fly);
+}
+
 // 팔레트 입력 배선 (마우스/터치 + 키보드는 InputController 내부)
 palette.querySelectorAll('.emo-btn').forEach((btn) => {
   const emo = Number(btn.dataset.emo);
@@ -324,9 +413,15 @@ palette.querySelectorAll('.emo-btn').forEach((btn) => {
   } else if (emo === 1) {
     btn.addEventListener('pointerdown', () => input && input.tapNo());
   } else if (emo === 2) {
-    btn.addEventListener('pointerdown', () => input && input.holdPleaseStart());
-    btn.addEventListener('pointerup', () => input && input.holdPleaseEnd());
-    btn.addEventListener('pointerleave', () => input && input.holdPleaseEnd());
+    btn.addEventListener('pointerdown', (ev) => {
+      btn.setPointerCapture(ev.pointerId);
+      if (input) input.holdPleaseStart();
+    });
+    btn.addEventListener('pointerup', (ev) => {
+      if (btn.hasPointerCapture(ev.pointerId)) btn.releasePointerCapture(ev.pointerId);
+      if (input) input.holdPleaseEnd();
+    });
+    btn.addEventListener('lostpointercapture', () => input && input.holdPleaseEnd());
     btn.addEventListener('pointercancel', () => input && input.holdPleaseEnd());
   }
 });
@@ -502,6 +597,7 @@ $('#replay-btn').addEventListener('click', () => {
     ruler = null;
   }
   resultEl.hidden = true;
+  castFeedback.replaceChildren();
   phase = 'idle';
   startBtn.hidden = false;
   phaseTag.textContent = 'Before kickoff';

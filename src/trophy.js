@@ -191,6 +191,8 @@ export class Trophy {
     this._swirl = 0;
     this._burst = 0;
     this._flash = 0;
+    this._impactAge = 99;
+    this._impactColor = new THREE.Color(0x000000);
     this._now = 0;
     this._lastT = 0;
     this._count = 0;
@@ -404,6 +406,15 @@ export class Trophy {
   // liveImpulse (§4) — 주조선 재질만 즉시 반응. 지오메트리 재생성 없음.
   pulse(emotionIndex) {
     this._imp[emotionIndex] = Math.min(1.6, this._imp[emotionIndex] + (emotionIndex === 2 ? 0.55 : 1.0));
+  }
+
+  // 전송 조각이 도착한 순간에만 호출한다. 트로피 전체가 짧게 튕기며
+  // 해당 감정색으로 달아올라 "여기에 박혔다"는 종착점을 만든다.
+  impact(emotionIndex) {
+    this.pulse(emotionIndex);
+    this._impactAge = 0;
+    const color = RAMPS[emotionIndex][Math.min(3, RAMPS[emotionIndex].length - 1)];
+    this._impactColor.setRGB(color[0], color[1], color[2]);
   }
 
   setLive(liveE) {
@@ -622,6 +633,19 @@ export class Trophy {
     this._burst *= Math.exp(-dt / 0.5);
     this._uniforms.uSwirl.value = this._swirl;
     this._uniforms.uBurst.value = this._burst;
+
+    // 빠른 확대 → 작은 역방향 반동 → 제자리. 고스트 메시의 색 번쩍임도 함께 감쇠한다.
+    this._impactAge += dt;
+    if (this._impactAge < 1.15) {
+      const envelope = Math.exp(-this._impactAge / 0.28);
+      const pop = Math.sin(this._impactAge * 20) * envelope * 0.055;
+      this.group.scale.setScalar(1 + pop);
+      this._ghostFillMat.emissive.copy(this._impactColor);
+      this._ghostFillMat.emissiveIntensity = 0.08 + envelope * 0.82;
+    } else {
+      this.group.scale.setScalar(1);
+      this._ghostFillMat.emissiveIntensity = 0;
+    }
 
     if (this.live) {
       const y = this.castFrontY();

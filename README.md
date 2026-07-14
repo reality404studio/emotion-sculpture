@@ -17,6 +17,17 @@ are ever the same.**
 
 ---
 
+## Development timeline
+
+- **Hackathon submission baseline:** commit `731cdda` and every revision before
+  it are the build created for the DEV Weekend Challenge hackathon.
+- **Post-hackathon polish:** revisions after `731cdda`, beginning with the
+  input-to-trophy visual feedback pass, are follow-up refinements made after the
+  hackathon. These changes focus on clearer visual causality, interaction feel,
+  and presentation quality without redefining the original submission.
+
+---
+
 ## Built for: DEV Weekend Challenge — Passion Edition (`#devchallenge` `#weekendchallenge`)
 Targeting the **Best use of Solana** category.
 

@@ -30,6 +30,59 @@ body::before {
 
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
 
+/* 버튼 → 트로피 전송 레이어. 빛 조각의 머리와 꼬리가 이동 방향을 직접 보여준다. */
+#cast-feedback {
+  position: fixed; inset: 0; z-index: 11; pointer-events: none; overflow: hidden;
+}
+.cast-orb {
+  position: absolute; left: 0; top: 0; width: 25px; height: 25px;
+  margin: -12.5px 0 0 -12.5px; opacity: 0; transform-origin: center;
+  filter: drop-shadow(0 0 9px var(--cast-color)) drop-shadow(0 0 20px var(--cast-color));
+  will-change: transform, opacity;
+}
+.cast-orb::before,
+.cast-orb::after {
+  content: ''; position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  width: 72px; height: 8px; border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--cast-color) 28%, transparent), var(--cast-color));
+  filter: blur(2px); opacity: 0.8;
+}
+.cast-orb::after { width: 42px; height: 2px; filter: none; opacity: 1; }
+.cast-orb > i {
+  position: absolute; inset: 2px; border-radius: 50%; background: #fff;
+  border: 4px solid color-mix(in srgb, var(--cast-color) 78%, white);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--cast-color) 23%, transparent), 0 0 26px 8px var(--cast-color);
+}
+.cast-orb--2 { width: 19px; height: 19px; margin: -9.5px 0 0 -9.5px; }
+.cast-orb--2::before { width: 54px; }
+
+.cast-impact {
+  --impact-size: 76px;
+  position: absolute; width: var(--impact-size); height: var(--impact-size);
+  margin: calc(var(--impact-size) / -2) 0 0 calc(var(--impact-size) / -2);
+  border: 3px solid color-mix(in srgb, var(--cast-color) 88%, white);
+  border-radius: 50%; filter: drop-shadow(0 0 12px var(--cast-color));
+  animation: cast-impact 780ms cubic-bezier(0.12, 0.75, 0.22, 1) both;
+}
+.cast-impact > i {
+  position: absolute; inset: 12px; border: 2px solid var(--cast-color); border-radius: 50%;
+  animation: cast-impact-inner 620ms ease-out both;
+}
+.cast-impact > b {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: #fff; font-size: 24px; text-shadow: 0 0 14px var(--cast-color); font-weight: 900;
+}
+@keyframes cast-impact {
+  0% { opacity: 0; transform: scale(0.18); }
+  22% { opacity: 1; transform: scale(1.08); }
+  48% { transform: scale(0.82); }
+  100% { opacity: 0; transform: scale(1.65); }
+}
+@keyframes cast-impact-inner {
+  0% { opacity: 1; transform: scale(0.25); }
+  100% { opacity: 0; transform: scale(2.2); }
+}
+
 #topbar {
   position: fixed;
   top: 0;
@@ -141,6 +194,15 @@ button span { color: currentColor; margin-left: 6px; }
   box-shadow: 0 15px 34px color-mix(in srgb, var(--c) 22%, transparent), inset 0 0 30px color-mix(in srgb, var(--c) 12%, transparent);
 }
 .emo-btn.flash { background: color-mix(in srgb, var(--c) 30%, #10142a); box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 18%, transparent), 0 0 52px color-mix(in srgb, var(--c) 65%, transparent); transform: translateY(-8px) scale(1.025); }
+.emo-btn.sending::before {
+  height: 9px; opacity: 1; transform: translateY(-3px) scaleX(0.76);
+  box-shadow: 0 -10px 28px 7px var(--c);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cast-orb::before { width: 34px; }
+  .cast-impact { animation-duration: 360ms; }
+}
 
 #result { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: flex-start; padding-left: 8vw; pointer-events: none; }
 .result-card { pointer-events: auto; width: 380px; background: rgba(13, 16, 31, 0.78); border: 1px solid rgba(150, 165, 230, 0.24); border-radius: 24px; padding: 28px; backdrop-filter: blur(20px); box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5); }

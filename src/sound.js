@@ -18,6 +18,9 @@ export class CastSound {
     this.yesStep = 0;
     this.voiceCount = 0;
     this._unlockPromise = null;
+    this._nextStirAt = 0;
+    this._stirSeed = 0;
+    this._stirSettleTimer = null;
   }
 
   async unlock() {
@@ -75,6 +78,9 @@ export class CastSound {
   reset() {
     this.yesStep = 0;
     this.voiceCount = 0;
+    this._nextStirAt = 0;
+    this._stirSeed = 0;
+    this.stopStir();
   }
 
   launch(emotion, detail = {}, { duration = 0.6, pan = 0 } = {}) {
@@ -106,6 +112,29 @@ export class CastSound {
       this._tone(base, now, 0.16, 0.018, 'sine');
       this._tone(base * 1.5, now + 0.055, 0.28, 0.014, 'sine');
     });
+  }
+
+  // 완성된 트로피를 저을 때만 나는 저강도 촉각음.
+  // 속도는 밀도, 높이는 음높이, 좌우 위치는 스테레오 방향에 대응한다.
+  stir({ speed = 0, pan = 0, height = 0.5, turn = false } = {}) {
+    const amount = clamp(speed, 0, 1);
+    if (amount < 0.1) return;
+    const stereo = clamp(pan, -0.82, 0.82);
+    const vertical = clamp(height, 0, 1);
+    this._scheduleStirSettle(stereo, vertical);
+
+    this._playWhenReady(() => {
+      const now = this.ctx.currentTime;
+      if (now < this._nextStirAt) return;
+      this._nextStirAt = now + (amount > 0.62 ? 0.085 : 0.12);
+      this._stirShimmer(amount, vertical, stereo, now);
+      if (amount > 0.38 || turn) this._stirClinks(amount, vertical, stereo, turn, now);
+    });
+  }
+
+  stopStir() {
+    if (this._stirSettleTimer !== null) clearTimeout(this._stirSettleTimer);
+    this._stirSettleTimer = null;
   }
 
   _createContext(AudioContextClass) {
@@ -150,6 +179,49 @@ export class CastSound {
     if (typeof document !== 'undefined' && this.ctx) {
       document.documentElement.dataset.sound = this.ctx.state;
     }
+  }
+
+  _scheduleStirSettle(pan, height) {
+    this.stopStir();
+    this._stirSettleTimer = setTimeout(() => {
+      this._stirSettleTimer = null;
+      this._playWhenReady(() => this._stirSettle(pan, height, this.ctx.currentTime));
+    }, 180);
+  }
+
+  _stirShimmer(speed, height, pan, now) {
+    const duration = 0.05 + speed * 0.055;
+    const source = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const gain = this.ctx.createGain();
+    source.buffer = this.noise;
+    filter.type = 'bandpass';
+    filter.Q.value = 3.6;
+    filter.frequency.value = 1050 + height * 2600;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.0018 + speed * 0.0048, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    source.connect(filter).connect(gain);
+    this._route(gain, pan);
+    const offset = (this._stirSeed++ * 0.137) % 1.75;
+    source.start(now, offset, duration + 0.01);
+  }
+
+  _stirClinks(speed, height, pan, turn, now) {
+    const base = 245 * Math.pow(2, height * 1.45);
+    const count = speed > 0.82 ? 3 : speed > 0.56 ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      const frequency = base * (1 + i * 0.34);
+      const level = (0.0028 + speed * 0.0042) / (1 + i * 0.45);
+      this._tone(frequency, now + i * 0.026, 0.12 + i * 0.035, level, 'sine', pan);
+    }
+    if (turn) this._tone(base * 2.65, now + 0.008, 0.18, 0.0082, 'sine', pan);
+  }
+
+  _stirSettle(pan, height, now) {
+    const base = 210 * Math.pow(2, height * 1.05);
+    this._tone(base * 1.5, now, 0.18, 0.0034, 'sine', pan);
+    this._tone(base * 2.02, now + 0.045, 0.25, 0.0023, 'sine', pan * 0.7);
   }
 
   _ready() {
@@ -241,7 +313,7 @@ export class CastSound {
     osc.stop(now + 0.14);
   }
 
-  _tone(frequency, now, decay, level, type) {
+  _tone(frequency, now, decay, level, type, pan = 0) {
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
     osc.type = type;
@@ -249,7 +321,8 @@ export class CastSound {
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(level, now + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
-    osc.connect(gain).connect(this.master);
+    osc.connect(gain);
+    this._route(gain, pan);
     osc.start(now);
     osc.stop(now + decay + 0.02);
   }

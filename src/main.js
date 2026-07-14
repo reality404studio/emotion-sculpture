@@ -547,16 +547,39 @@ const stirNdc = new THREE.Vector2();
 const stirHit = new THREE.Vector3();
 let lastStirX = 0;
 let lastStirY = 0;
+let lastStirAt = 0;
+let lastStirDx = 0;
+let lastStirDy = 0;
 canvas.addEventListener('pointermove', (ev) => {
-  const speed = Math.min(1, Math.hypot(ev.clientX - lastStirX, ev.clientY - lastStirY) / 42);
+  const now = performance.now();
+  const dx = ev.clientX - lastStirX;
+  const dy = ev.clientY - lastStirY;
+  const continuous = lastStirAt > 0 && now - lastStirAt < 150;
+  const speed = continuous ? Math.min(1, Math.hypot(dx, dy) / 42) : 0;
   lastStirX = ev.clientX;
   lastStirY = ev.clientY;
-  if (phase !== 'result' && phase !== 'compare') return;
+  lastStirAt = now;
+  if (phase !== 'result' && phase !== 'compare') {
+    lastStirDx = 0;
+    lastStirDy = 0;
+    return;
+  }
   if (speed < 0.02) return;
+
+  const previousLength = Math.hypot(lastStirDx, lastStirDy);
+  const currentLength = Math.hypot(dx, dy);
+  const directionDot = previousLength > 0 && currentLength > 0
+    ? (dx * lastStirDx + dy * lastStirDy) / (previousLength * currentLength)
+    : 1;
+  const sharpTurn = speed > 0.2 && previousLength > 4 && directionDot < -0.12;
+  lastStirDx = dx;
+  lastStirDy = dy;
 
   stirNdc.set((ev.clientX / window.innerWidth) * 2 - 1, -(ev.clientY / window.innerHeight) * 2 + 1);
   stirRay.setFromCamera(stirNdc, camera);
   const targets = phase === 'compare' ? compareTrophies : sculpture ? [sculpture] : [];
+  let stirred = false;
+  let stirHeight = 0;
   for (const trophy of targets) {
     // 트로피 축을 지나고 카메라를 향하는 평면과 레이의 교점 = 젓는 지점
     const axis = new THREE.Vector3();
@@ -565,8 +588,19 @@ canvas.addEventListener('pointermove', (ev) => {
     const normal = new THREE.Vector3().subVectors(camera.position, axis).setY(0).normalize();
     const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, axis);
     if (stirRay.ray.intersectPlane(plane, stirHit)) {
-      trophy.stir(trophy.group.worldToLocal(stirHit.clone()), speed * 0.45);
+      const localPoint = trophy.group.worldToLocal(stirHit.clone());
+      trophy.stir(localPoint, speed * 0.45);
+      stirHeight = Math.max(stirHeight, Math.max(0, Math.min(1, (localPoint.y - BASE_H) / GLASS_H)));
+      stirred = true;
     }
+  }
+  if (stirred) {
+    castSound.stir({
+      speed,
+      pan: clampScreenPan(ev.clientX),
+      height: stirHeight,
+      turn: sharpTurn,
+    });
   }
 });
 
@@ -663,6 +697,7 @@ $('#replay-btn').addEventListener('click', () => {
   }
   resultEl.hidden = true;
   castFeedback.replaceChildren();
+  castSound.stopStir();
   phase = 'idle';
   liveProgress = 0;
   startBtn.hidden = false;

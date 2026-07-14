@@ -82,6 +82,9 @@ class TestCastSound extends CastSound {
   _glass(_frequency, emotion) { this.played.push(`glass:${emotion}`); }
   _thump(emotion) { this.played.push(`thump:${emotion}`); }
   _tone() { this.played.push('tone'); }
+  _stirShimmer(speed, height, pan) { this.played.push(`shimmer:${speed}:${height}:${pan}`); }
+  _stirClinks(speed, height, pan, turn) { this.played.push(`clinks:${speed}:${height}:${pan}:${turn}`); }
+  _scheduleStirSettle(pan, height) { this.played.push(`settle:${pan}:${height}`); }
 }
 
 globalThis.window = { AudioContext: FakeAudioContext };
@@ -132,4 +135,22 @@ await sound._unlockPromise;
 await settlePlayback();
 assert.deepEqual(sound.played.slice(-2), ['glass:0', 'thump:0']);
 
-console.log('PASS  sound unlock survives refresh, interruption, closed context, and replay');
+// 결과 트로피 사운드는 느린 커서 노이즈를 무시하고, 높이·패닝·급회전을 보존한다.
+sound.played = [];
+sound.ctx.state = 'running';
+sound.ctx.currentTime = 1;
+sound.stir({ speed: 0.05, pan: -1, height: 0.2 });
+assert.deepEqual(sound.played, []);
+sound.stir({ speed: 0.72, pan: 0.6, height: 0.85, turn: true });
+assert.deepEqual(sound.played, [
+  'settle:0.6:0.85',
+  'shimmer:0.72:0.85:0.6',
+  'clinks:0.72:0.85:0.6:true',
+]);
+sound.stir({ speed: 0.72, pan: -0.4, height: 0.25, turn: false });
+assert.deepEqual(sound.played.slice(-1), ['settle:-0.4:0.25']);
+sound.ctx.currentTime = 1.2;
+sound.stir({ speed: 0.2, pan: -0.4, height: 0.25, turn: false });
+assert.deepEqual(sound.played.slice(-2), ['settle:-0.4:0.25', 'shimmer:0.2:0.25:-0.4']);
+
+console.log('PASS  sound unlock and result-trophy stir mapping stay deterministic');

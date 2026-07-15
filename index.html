@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Emotion Foundry — Cast the match</title>
+    <title>Emotion Foundry — Cast your glass</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <!-- 3D 조각 캔버스 (주인공) -->
     <canvas id="scene"></canvas>
 
-    <!-- 버튼에서 트로피까지 감정이 실제로 이동하는 전송 레이어 -->
+    <!-- 버튼에서 몰드 입구까지 실제 유리구슬을 옮기는 전송 레이어 -->
     <div id="cast-feedback" aria-hidden="true"></div>
 
     <!-- 상단: 하나의 주조 시스템으로 읽히는 상태 프레임 -->
@@ -24,9 +24,9 @@
     </header>
 
     <div id="scene-copy" aria-hidden="true">
-      <span class="eyebrow">LIVE EMOTION / PERMANENT FORM</span>
-      <span class="scene-title">Cast what<br />the match<br /><em>made you feel.</em></span>
-      <span class="scene-subtitle">Each reaction enters the mold and becomes part of one irreversible object.</span>
+      <span class="eyebrow">YOUR REACTIONS / CAST IN GLASS</span>
+      <span class="scene-title">Gather the<br />feeling.<br /><em>Cast the memory.</em></span>
+      <span class="scene-subtitle">Every reaction becomes a glass bead. Watch them gather, melt, and remain inside one object.</span>
     </div>
 
     <!-- 하이라이트 영상 — 기본은 아이콘, 펼쳤을 때만 화면과 링크 입력을 노출한다. -->
@@ -75,7 +75,7 @@
     <!-- 시작/종료 컨트롤 -->
     <div id="controls">
       <button id="start-btn" class="primary">ENTER THE FOUNDRY <span>↗</span></button>
-      <button id="end-btn" class="ghost" hidden>SEAL THE CAST <span>→</span></button>
+      <button id="end-btn" class="ghost" hidden>CAST THE GLASS <span>→</span></button>
     </div>
 
     <!-- 감정 입력 팔레트 (§6) — 하나의 주조 콘솔 안에서 감정색만 순간적으로 나타난다. -->
@@ -107,18 +107,18 @@
         >
           <span class="result-panel-grip" aria-hidden="true"></span>
           <span class="result-panel-toggle-copy">
-            <span class="result-kicker">CAST 01 / SEALED</span>
+            <span class="result-kicker">CAST 01 / COOLED</span>
             <span class="result-panel-toggle-label">HIDE RESULT INFO</span>
           </span>
           <span class="result-panel-chevron" aria-hidden="true">⌄</span>
         </button>
 
         <div id="result-panel-body" class="result-panel-body">
-          <h1>Your emotion<br />has taken form.</h1>
-          <p class="tagline">One match. One irreversible object.</p>
+          <h1>Your glass<br />holds the feeling.</h1>
+          <p class="tagline">The beads you placed are preserved inside this one cast object.</p>
           <div class="result-meta">
             <div><span>recorded</span><b id="r-duration">–</b></div>
-            <div><span>beats</span><b id="r-beats">–</b></div>
+            <div><span>glass record</span><b id="r-beats">–</b></div>
           </div>
 
           <details class="result-details">

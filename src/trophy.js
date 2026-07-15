@@ -1,33 +1,21 @@
-// Emotion Trophy — 파티클 주조 (emotion-trophy-spec.md v3 + 파티클 부록)
+// Emotion Trophy — accumulated glass casting.
 //
-// 트로피 아키타입 프로파일 P(u)는 유지하되, 재료가 유리 메시에서 입자로 바뀐다.
-// 모든 입력은 입자를 낳는다:
-//   좋아! = 한 점에서 터지는 스플랫 → 금빛 방울 클러스터로 정착
-//   안돼! = 바깥에서 안으로 스냅되는 붉은 세로 시임
-//   제발! = 흩어진 구름이 촘촘한 파란 실 한 줄로 응집 (홀드 시간 = 실의 개수)
-// 고요한 틱도 옅은 샴페인 입자 링을 남긴다 — 침묵조차 기록이다.
-//
-// 성능 설계: 입자당 홈 위치·스폰 위치·생성시각·그래디언트 쌍을 버퍼에 1회 쓰고,
-// 정착·산란·복귀·반짝임은 전부 버텍스 셰이더가 계산한다. CPU는 입력 순간에만 일한다.
-//
-// 결정론 (§6): 홈 위치·색·크기는 seed + beats의 순수 함수. Math.random() 금지.
-// 스폰 위치/시각은 애니메이션 전용이며 finishCast 시 결정론 경로로 재구축된다.
+// Inputs are not particles. Each input becomes a glass bead, falls through the
+// open mouth of the mould, and keeps its colour and place in the pile. Casting
+// softens those same beads from the bottom upward. They spread into overlapping
+// inclusions while a single clear-glass body closes around them. The finished
+// object therefore preserves the location, order, and dominance of the inputs.
 
 import * as THREE from 'three';
 import { BASELINE, DECAY } from './emotions.js';
 import { hashInt } from './noise.js';
 
-// ── 비례 (§2.1) ──
 const TOTAL_H = 4.4;
 const BASE_H = TOTAL_H * 0.18;
 const GLASS_H = TOTAL_H - BASE_H;
 const R_UNIT = 1.05;
-const RINGS = 200; // P(u) 샘플 해상도
+const CAPACITY = 48;
 
-const MAX_PARTICLES = 200_000;
-const FLOATS = { pos: 3, spawn: 3, birth: 1, dur: 1, size: 1, colA: 3, colB: 3, mix: 1, phase: 1, energy: 1 };
-
-// 트로피 아키타입 프로파일 — 전원 공통 (§2.1)
 const PROFILE = [
   [0.0, 0.36],
   [0.045, 0.21],
@@ -42,687 +30,412 @@ const PROFILE = [
   [1.0, 1.04],
 ];
 
-const QUIET = [BASELINE, BASELINE, BASELINE];
-const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const COLORS = [0xffb23f, 0xef5847, 0x4d86ed];
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const smooth = (v) => {
+  const t = clamp01(v);
+  return t * t * (3 - 2 * t);
+};
 
-function hexToRgb(hex) {
-  return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
-}
-
-// 그래디언트 맵 (파티클 부록): 이벤트마다 오리진-인접 색 쌍을 하나 뽑아
-// 입자별로 섞는다 — 단색 감정 대신 살아있는 그라데이션.
-// 램프는 의도적으로 한 단계 어둡게(×0.78) — 블룸이 밝기를 얹으므로 원색은 탄다.
-const dimRgb = (hex) => hexToRgb(hex).map((v) => v * 0.78);
-const RAMPS = [
-  [0xfff3c9, 0xffd9a0, 0xffb454, 0xf5a524, 0xff7847].map(dimRgb), // 좋아 — 크림→골드→코랄
-  [0xffb09a, 0xff7b5c, 0xe4573d, 0xc13a55, 0x8a2040].map(dimRgb), // 안돼 — 코랄→레드→와인
-  [0xd9f2ff, 0xa8d8ff, 0x5fb8ff, 0x3b82f6, 0x5a5fe0].map(dimRgb), // 제발 — 아이스→블루→인디고
-];
-const QUIET_PAIR = [hexToRgb(0xefe6cf), hexToRgb(0xd9cfb4)]; // 고요 — 옅은 샴페인
-
-function seedPhase(seed, salt) {
-  return ((((seed ^ (salt * 0x9e3779b9)) >>> 0) % 100000) / 100000) * Math.PI * 2;
-}
-
-// 결정론적 [0,1) — (seed, tick, emotion, particle, salt) 조합마다 독립
-function rnd(seed, t, emo, i, salt) {
-  const n =
-    (seed ^
-      Math.imul(t + 1, 0x9e3779b1) ^
-      Math.imul(emo + 1, 0x85ebca6b) ^
-      Math.imul(i + 1, 0xc2b2ae35) ^
-      Math.imul(salt + 1, 0x27d4eb2f)) >>>
-    0;
+function rnd(seed, index, salt = 0) {
+  const n = (seed ^ Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(salt + 1, 0x85ebca6b)) >>> 0;
   return hashInt(n);
 }
-// 근사 가우시안 [-1.5, 1.5]
-function gauss(seed, t, emo, i, salt) {
-  return rnd(seed, t, emo, i, salt) + rnd(seed, t, emo, i, salt + 61) + rnd(seed, t, emo, i, salt + 131) - 1.5;
-}
-
-// ── P(u): Catmull-Rom 보간, 1회 샘플링 ──
-const PU = (() => {
-  const out = new Float32Array(RINGS + 1);
-  const pts = PROFILE;
-  for (let r = 0; r <= RINGS; r++) {
-    const u = r / RINGS;
-    let k = 0;
-    while (k < pts.length - 2 && u > pts[k + 1][0]) k++;
-    const [u0, r0] = pts[Math.max(0, k - 1)];
-    const [u1, r1] = pts[k];
-    const [u2, r2] = pts[k + 1];
-    const [u3, r3] = pts[Math.min(pts.length - 1, k + 2)];
-    const t = clamp01((u - u1) / (u2 - u1 || 1));
-    const m1 = ((r2 - r0) / (u2 - u0 || 1)) * (u2 - u1);
-    const m2 = ((r3 - r1) / (u3 - u1 || 1)) * (u2 - u1);
-    const t2 = t * t;
-    const t3 = t2 * t;
-    out[r] = Math.max(
-      0.13,
-      (2 * t3 - 3 * t2 + 1) * r1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * r2 + (t3 - t2) * m2
-    );
-  }
-  return out;
-})();
 
 function profileAt(u) {
-  return PU[clamp(Math.round(clamp01(u) * RINGS), 0, RINGS)];
+  const x = clamp01(u);
+  let i = 0;
+  while (i < PROFILE.length - 2 && x > PROFILE[i + 1][0]) i++;
+  const [u0, r0] = PROFILE[i];
+  const [u1, r1] = PROFILE[i + 1];
+  const t = smooth((x - u0) / Math.max(0.0001, u1 - u0));
+  return r0 + (r1 - r0) * t;
 }
 
-// ── 셰이더 — 정착·반짝임·완성 쇼크웨이브·포인터 소용돌이 전부 GPU ──
-const VERT = /* glsl */ `
-  attribute vec3 aSpawn;
-  attribute float aBirth, aDur, aSize, aMix, aPhase, aEnergy;
-  attribute vec3 aColA, aColB;
-  uniform float uTime, uSwirl, uBurst, uPixelRatio;
-  uniform vec3 uPointer;
-  varying vec3 vColor;
-  varying float vAlpha, vGlow;
-
-  void main() {
-    float t = clamp((uTime - aBirth) / aDur, 0.0, 1.0);
-    float s = 1.0 - pow(1.0 - t, 3.0); // easeOutCubic: 스플랫 → 정착
-    vec3 pos = mix(aSpawn, position, s);
-
-    // 살아있는 숨 — 미세 셔머
-    pos += 0.011 * (0.35 + aEnergy) * vec3(
-      sin(uTime * 1.7 + aPhase),
-      cos(uTime * 1.3 + aPhase * 1.7),
-      sin(uTime * 2.1 + aPhase * 0.7));
-
-    vec2 radial = normalize(pos.xz + vec2(1e-4));
-
-    // 표면 안팎 맥동 — 겉에 붙은 점이 아니라 트로피 살갗의 일부처럼,
-    // 고스트 메시 표면을 넘나들며 숨쉰다
-    float breathe = sin(uTime * 1.2 + aPhase * 2.3) * (0.05 + 0.045 * aEnergy);
-    pos.xz += radial * breathe;
-
-    // 완성 쇼크웨이브 — 축에서 바깥으로 훅 퍼졌다 모인다
-    float bw = uBurst * (0.55 + 0.45 * sin(aPhase * 7.0));
-    pos.xz += radial * bw * 0.9;
-    pos.y += bw * 0.22 * sin(aPhase * 11.0);
-
-    // 포인터 소용돌이 — 휘휘 저으면 흩어지고, 놓으면 홈으로 복귀
-    vec3 d = pos - uPointer;
-    float r2 = dot(d, d);
-    float infl = exp(-r2 * 1.4) * uSwirl;
-    vec3 tangent = normalize(cross(vec3(0.0, 1.0, 0.0), d + vec3(1e-4)));
-    pos += (tangent * 1.15 + normalize(d + vec3(1e-4)) * 0.5) * infl;
-    pos += 0.4 * infl * vec3(
-      sin(uTime * 6.0 + aPhase * 3.0),
-      sin(uTime * 5.0 + aPhase * 5.0),
-      cos(uTime * 7.0 + aPhase * 2.0));
-
-    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-    gl_Position = projectionMatrix * mv;
-    gl_PointSize = clamp(aSize * uPixelRatio * (12.0 / -mv.z), 1.0, 90.0);
-
-    vGlow = (1.0 - s) * 1.4 + infl * 1.2; // 갓 태어난 입자와 저어진 입자는 달아오른다
-    vAlpha = aEnergy * smoothstep(0.0, 0.12, t);
-    vColor = mix(aColA, aColB, clamp(aMix + 0.22 * sin(uTime * 0.7 + aPhase), 0.0, 1.0));
+function makeLatheGeometry(radialScale = 1) {
+  const points = [];
+  for (let i = 0; i <= 72; i++) {
+    const u = i / 72;
+    points.push(new THREE.Vector2(profileAt(u) * R_UNIT * radialScale, BASE_H + u * GLASS_H));
   }
-`;
+  const geometry = new THREE.LatheGeometry(points, 96);
+  geometry.computeVertexNormals();
+  return geometry;
+}
 
-const FRAG = /* glsl */ `
-  varying vec3 vColor;
-  varying float vAlpha, vGlow;
-  void main() {
-    // 가우시안 이중 폴오프 — 밝은 심 + 넓고 부드럽게 퍼지는 블러 헤일로
-    float d = length(gl_PointCoord - 0.5) * 2.0;
-    float halo = exp(-d * d * 3.2) * smoothstep(1.0, 0.72, d);
-    float core = exp(-d * d * 14.0);
-    float a = halo * vAlpha;
-    if (a < 0.003) discard;
-    vec3 c = vColor * (0.4 + 1.5 * core + vGlow * 0.8);
-    gl_FragColor = vec4(c * a, a);
-  }
-`;
+function glassMaterial(color, { opacity = 1, transmission = 0.25, roughness = 0.12, thickness = 0.7 } = {}) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    metalness: 0,
+    roughness,
+    transmission,
+    thickness,
+    ior: 1.46,
+    clearcoat: 1,
+    clearcoatRoughness: 0.1,
+    transparent: opacity < 1 || transmission > 0,
+    opacity,
+    depthWrite: opacity >= 0.98,
+  });
+}
 
 export class Trophy {
   constructor(sessionSeed) {
     this.seed = sessionSeed >>> 0;
     this.beats = [];
+    this.materials = [];
     this.live = false;
-    this.castU = 1;
-    this._timeTicks = 2;
-    this._liveE = QUIET.slice();
-    this._imp = [0, 0, 0];
-    this._swirl = 0;
-    this._burst = 0;
-    this._flash = 0;
-    this._impactAge = 99;
-    this._impactColor = new THREE.Color(0x000000);
+    this.mode = 'dormant';
+    this.castU = 0;
     this._now = 0;
     this._lastT = 0;
-    this._count = 0;
-
-    const phase = seedPhase(this.seed, 40);
-    this._sector = [phase, phase + (Math.PI * 2) / 3, phase + (Math.PI * 4) / 3];
-
-    this._buildParticles();
-    this._buildGhost();
-    this._buildBase();
-    this._buildMolten();
+    this._castAge = 0;
+    this._settlePulse = 0;
 
     this.group = new THREE.Group();
-    this.group.add(this._baseGroup, this._ghostGroup, this.points, this._moltenGroup);
+    this._buildBody();
+    this._buildBase();
+    this._buildMaterials();
+    this.group.add(this._baseGroup, this._bodyGroup, this._materialGroup);
   }
 
   get height() {
     return TOTAL_H;
   }
 
+  get capacity() {
+    return CAPACITY;
+  }
+
   castFrontY() {
-    return BASE_H + clamp01(this.castU) * GLASS_H;
+    if (this.materials.length === 0) return BASE_H + GLASS_H * 0.31;
+    const layer = Math.floor((this.materials.length - 1) / 4);
+    return BASE_H + GLASS_H * 0.31 + Math.min(11, layer) * ((GLASS_H * 0.63 - 0.16) / 11);
   }
 
-  _buildParticles() {
-    this._buf = {};
-    this.geometry = new THREE.BufferGeometry();
-    for (const [name, itemSize] of Object.entries(FLOATS)) {
-      const arr = new Float32Array(MAX_PARTICLES * itemSize);
-      const attrName = name === 'pos' ? 'position' : 'a' + name[0].toUpperCase() + name.slice(1);
-      const attr = new THREE.BufferAttribute(arr, itemSize);
-      attr.setUsage(THREE.DynamicDrawUsage);
-      this.geometry.setAttribute(attrName, attr);
-      this._buf[name] = arr;
-    }
-    this.geometry.setDrawRange(0, 0);
+  _buildBody() {
+    this._bodyGroup = new THREE.Group();
+    this._shellGeom = makeLatheGeometry(1);
+    this._innerGeom = makeLatheGeometry(0.965);
 
-    this._uniforms = {
-      uTime: { value: 0 },
-      uSwirl: { value: 0 },
-      uBurst: { value: 0 },
-      uPointer: { value: new THREE.Vector3(0, -99, 0) },
-      uPixelRatio: { value: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2) },
-    };
-    this.material = new THREE.ShaderMaterial({
-      uniforms: this._uniforms,
-      vertexShader: VERT,
-      fragmentShader: FRAG,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
+    this._shellMat = glassMaterial(0xd9e4e5, {
+      opacity: 0.2,
+      transmission: 0.72,
+      roughness: 0.11,
+      thickness: 1.45,
     });
-    this.points = new THREE.Points(this.geometry, this.material);
-    this.points.frustumCulled = false;
-  }
-
-  // 유리 몰드 — 완성 전에도 잠든 실루엣이 보이고, 감정 입자는 그 안에 응고된다.
-  // 전체 와이어프레임 대신 물성 있는 투명 쉘과 최소한의 외곽선만 사용한다.
-  _buildGhost() {
-    const ROWS_G = 46;
-    const SEG_G = 40;
-    const CAP_G = 5;
-    const total = ROWS_G + 1 + CAP_G;
-    const pos = new Float32Array(total * SEG_G * 3);
-    for (let r = 0; r < total; r++) {
-      const isCap = r > ROWS_G;
-      const capT = isCap ? (r - ROWS_G) / CAP_G : 0;
-      const u = isCap ? 1 : r / ROWS_G;
-      const baseR = profileAt(u) * R_UNIT * 0.985; // 입자보다 살짝 안쪽
-      const radius = isCap ? baseR * Math.cos((capT * Math.PI) / 2) : baseR;
-      const y = isCap
-        ? BASE_H + GLASS_H + 0.1 * Math.sin((capT * Math.PI) / 2)
-        : BASE_H + u * GLASS_H;
-      for (let s = 0; s < SEG_G; s++) {
-        const theta = (s / SEG_G) * Math.PI * 2;
-        const i = (r * SEG_G + s) * 3;
-        pos[i] = radius * Math.cos(theta);
-        pos[i + 1] = y;
-        pos[i + 2] = radius * Math.sin(theta);
-      }
-    }
-    const indices = [];
-    for (let r = 0; r < total - 1; r++) {
-      for (let s = 0; s < SEG_G; s++) {
-        const next = (s + 1) % SEG_G;
-        const a = r * SEG_G + s;
-        const b = r * SEG_G + next;
-        const c = (r + 1) * SEG_G + next;
-        const d = (r + 1) * SEG_G + s;
-        indices.push(a, b, d, b, c, d);
-      }
-    }
-    this._ghostGeom = new THREE.BufferGeometry();
-    this._ghostGeom.setIndex(indices);
-    this._ghostGeom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this._ghostGeom.computeVertexNormals();
-
-    this._ghostFillMat = new THREE.MeshPhysicalMaterial({
-      color: 0x9ba9c8,
-      roughness: 0.12,
-      metalness: 0,
+    this._shellMat.depthWrite = false;
+    this._innerMat = glassMaterial(0x7f9398, {
+      opacity: 0.1,
       transmission: 0.68,
-      thickness: 0.9,
-      ior: 1.46,
-      transparent: true,
-      opacity: 0.36,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      clearcoat: 1,
-      clearcoatRoughness: 0.16,
-      emissive: new THREE.Color(0x111a35),
-      emissiveIntensity: 0.08,
+      roughness: 0.2,
+      thickness: 0.35,
     });
-    this._ghostWireMat = new THREE.LineBasicMaterial({
-      color: 0x93a8ff,
-      transparent: true,
-      opacity: 0.16,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+    this._innerMat.side = THREE.BackSide;
+    this._innerMat.depthWrite = false;
+
+    this._shell = new THREE.Mesh(this._shellGeom, this._shellMat);
+    this._shell.renderOrder = 5;
+    this._innerShell = new THREE.Mesh(this._innerGeom, this._innerMat);
+    this._innerShell.renderOrder = 4;
+
+    this._rimMat = glassMaterial(0xc8d6d8, {
+      opacity: 0.44,
+      transmission: 0.78,
+      roughness: 0.13,
+      thickness: 0.35,
     });
-    const fill = new THREE.Mesh(this._ghostGeom, this._ghostFillMat);
-    fill.renderOrder = 1;
-    const edgeGeom = new THREE.EdgesGeometry(this._ghostGeom, 34);
-    const wire = new THREE.LineSegments(edgeGeom, this._ghostWireMat);
-    wire.renderOrder = 2;
-    this._ghostEdgeGeom = edgeGeom;
-    this._ghostGroup = new THREE.Group();
-    this._ghostGroup.add(fill, wire);
+    this._rimMat.depthWrite = false;
+    this._rim = new THREE.Mesh(new THREE.TorusGeometry(profileAt(1) * R_UNIT, 0.035, 14, 112), this._rimMat);
+    this._rim.rotation.x = Math.PI / 2;
+    this._rim.position.y = TOTAL_H;
+
+    // A restrained mould collar makes the empty state legible without wireframe.
+    this._collarMat = new THREE.MeshStandardMaterial({
+      color: 0x20272a,
+      roughness: 0.72,
+      metalness: 0.06,
+      transparent: true,
+      opacity: 0.45,
+    });
+    this._collar = new THREE.Mesh(
+      new THREE.TorusGeometry(profileAt(1) * R_UNIT + 0.08, 0.018, 8, 112),
+      this._collarMat
+    );
+    this._collar.rotation.x = Math.PI / 2;
+    this._collar.position.y = TOTAL_H + 0.015;
+
+    this._bodyGroup.add(this._innerShell, this._shell, this._rim, this._collar);
   }
 
-  // 받침대 — 조형보다 먼저 보이지 않는 작은 주조용 클램프.
   _buildBase() {
     this._baseGroup = new THREE.Group();
-    const h1 = BASE_H * 0.31;
-    const h2 = BASE_H * 0.32;
-    const neckH = BASE_H - h1 - h2;
-    const stone = new THREE.MeshStandardMaterial({
-      color: 0x0c0e12,
-      roughness: 0.32,
-      metalness: 0.78,
-      emissive: new THREE.Color(0x05070c),
-      emissiveIntensity: 0.2,
+    const smoke = glassMaterial(0x263034, {
+      opacity: 0.92,
+      transmission: 0.2,
+      roughness: 0.2,
+      thickness: 1.2,
     });
-    this._bandMat = new THREE.MeshStandardMaterial({
-      color: 0x718cff,
-      roughness: 0.18,
-      metalness: 0.95,
-      emissive: new THREE.Color(0x294ab8),
-      emissiveIntensity: 0.32,
+    const clear = glassMaterial(0x8b9da0, {
+      opacity: 0.55,
+      transmission: 0.62,
+      roughness: 0.12,
+      thickness: 0.8,
     });
-    const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(0.94, 1.06, h1, 64), stone);
-    tier1.position.y = h1 / 2;
-    const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.82, h2, 64), stone);
-    tier2.position.y = h1 + h2 / 2;
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.5, neckH, 48), stone);
-    neck.position.y = h1 + h2 + neckH / 2;
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.73, 0.017, 10, 96), this._bandMat);
-    band.rotation.x = Math.PI / 2;
-    band.position.y = h1;
-    [tier1, tier2, neck, band].forEach((m) => {
-      m.castShadow = true;
-      m.receiveShadow = true;
-      this._baseGroup.add(m);
-    });
+    const footH = BASE_H * 0.36;
+    const shoulderH = BASE_H * 0.34;
+    const stemH = BASE_H - footH - shoulderH;
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.92, 1.02, footH, 72), smoke);
+    foot.position.y = footH / 2;
+    const shoulder = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.78, shoulderH, 72), smoke);
+    shoulder.position.y = footH + shoulderH / 2;
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.43, stemH, 64), clear);
+    stem.position.y = footH + shoulderH + stemH / 2;
+    for (const mesh of [foot, shoulder, stem]) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      this._baseGroup.add(mesh);
+    }
   }
 
-  // 주조선 — 차오르는 최상단의 용융 링 (§1, §4)
-  _buildMolten() {
-    this._moltenGroup = new THREE.Group();
-    this._ringMat = new THREE.MeshBasicMaterial({
-      color: 0xffb84d,
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    this._moltenRing = new THREE.Mesh(new THREE.TorusGeometry(1, 0.04, 10, 96), this._ringMat);
-    this._moltenRing.rotation.x = Math.PI / 2;
-    this._moltenLight = new THREE.PointLight(0xffb35c, 0, 7);
-    this._moltenGroup.add(this._moltenRing, this._moltenLight);
-    this._moltenGroup.visible = false;
+  _buildMaterials() {
+    this._materialGroup = new THREE.Group();
+    this._beadGeom = new THREE.IcosahedronGeometry(0.245, 3);
+    this._beadMaterials = COLORS.map((color) => glassMaterial(color, {
+      opacity: 1,
+      transmission: 0.12,
+      roughness: 0.13,
+      thickness: 0.72,
+    }));
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Phase API
-  // ─────────────────────────────────────────────────────────
-  beginLive(expectedTicks) {
+  beginLive() {
     this.live = true;
+    this.mode = 'collecting';
     this.beats = [];
     this.castU = 0;
-    this._timeTicks = Math.max(2, expectedTicks);
-    this._count = 0;
-    this.geometry.setDrawRange(0, 0);
-    this._moltenGroup.visible = true;
+    this._castAge = 0;
+    this._setBodyState(0);
   }
 
-  setCastProgress(p) {
-    if (this.live) this.castU = clamp01(p);
+  setCastProgress() {
+    // Fill is determined by accumulated material, never by an abstract timer.
+    this.castU = this.materials.length / CAPACITY;
   }
 
   addBeat(beat) {
-    const t = this.beats.length;
-    const prev = t > 0 ? this.beats[t - 1].e : QUIET;
     this.beats.push(beat);
-    const start = this._count;
-    this._emitBeat(t, beat.e, prev, this._timeTicks, this._now);
-    this._flushRange(start, this._count - start);
   }
 
-  // 종료 휘슬 = 주조 완료. 실제 beats 길이로 재정규화해 트로피를 끝까지 채우고,
-  // 쇼크웨이브 한 번으로 완성을 선언한다 (§2.2).
+  insertSphere(emotionIndex, detail = {}, immediate = false) {
+    if ((!this.live && !immediate) || this.materials.length >= CAPACITY) return false;
+    const index = this.materials.length;
+    const target = this._packingPosition(index);
+    const mesh = new THREE.Mesh(this._beadGeom, this._beadMaterials[emotionIndex]);
+    const radiusVariation = 0.9 + rnd(this.seed, index, 8) * 0.22;
+    mesh.scale.setScalar(radiusVariation);
+    mesh.position.copy(immediate ? target : new THREE.Vector3(0, TOTAL_H + 0.4, 0));
+    mesh.rotation.set(
+      rnd(this.seed, index, 11) * Math.PI,
+      rnd(this.seed, index, 12) * Math.PI,
+      rnd(this.seed, index, 13) * Math.PI
+    );
+    mesh.renderOrder = 2;
+
+    const flow = target.clone();
+    const flowAngle = Math.atan2(target.z, target.x) + (rnd(this.seed, index, 20) - 0.5) * 0.5;
+    const drift = (rnd(this.seed, index, 21) - 0.5) * 0.16;
+    flow.x = target.x * 0.82 + Math.cos(flowAngle) * drift;
+    flow.z = target.z * 0.82 + Math.sin(flowAngle) * drift;
+    flow.y += (rnd(this.seed, index, 22) - 0.5) * 0.12;
+
+    const item = {
+      index,
+      emotion: emotionIndex,
+      detail,
+      mesh,
+      target,
+      flow,
+      born: immediate ? -100 : this._now,
+      size: radiusVariation,
+    };
+    this.materials.push(item);
+    this._materialGroup.add(mesh);
+    this.castU = this.materials.length / CAPACITY;
+    this._settlePulse = 1;
+    if (immediate) this._applySealedTransform(item);
+    return this.materials.length >= CAPACITY;
+  }
+
+  _packingPosition(index) {
+    const perLayer = 4;
+    const layers = Math.ceil(CAPACITY / perLayer);
+    const layer = Math.floor(index / perLayer);
+    const slot = index % perLayer;
+    const u = 0.31 + ((layer + 0.5) / layers) * 0.63;
+    const radius = Math.max(0.02, profileAt(u) * R_UNIT * 0.72);
+    const ringSlot = slot / perLayer;
+    const angle = ringSlot * Math.PI * 2 + layer * 0.67 + (rnd(this.seed, index, 3) - 0.5) * 0.16;
+    const radial = radius * (0.86 + rnd(this.seed, index, 4) * 0.14);
+    const startY = BASE_H + GLASS_H * 0.31;
+    const step = (GLASS_H * 0.63 - 0.16) / Math.max(1, layers - 1);
+    return new THREE.Vector3(
+      Math.cos(angle) * radial,
+      startY + layer * step + (rnd(this.seed, index, 5) - 0.5) * 0.055,
+      Math.sin(angle) * radial
+    );
+  }
+
   finishCast() {
     this.live = false;
-    this.castU = 1;
-    this._timeTicks = Math.max(2, this.beats.length);
-    this._rebuildAll();
-    this._burst = 1.25;
-    this._flash = 1;
+    this.mode = 'melting';
+    this._castAge = 0;
+    this.castU = this.materials.length / CAPACITY;
+    this._prepareCastFlow();
   }
 
   setBeats(beats) {
     this.live = false;
+    this.mode = 'sealed';
     this.beats = beats.slice();
-    this.castU = 1;
-    this._timeTicks = Math.max(2, this.beats.length);
-    this._rebuildAll();
-    this._burst = 1.0; // 비교 뷰 입장 연출 — 흩어졌다 모이며 등장
-    this._moltenGroup.visible = false;
-  }
-
-  // liveImpulse (§4) — 주조선 재질만 즉시 반응. 지오메트리 재생성 없음.
-  pulse(emotionIndex) {
-    this._imp[emotionIndex] = Math.min(1.6, this._imp[emotionIndex] + (emotionIndex === 2 ? 0.55 : 1.0));
-  }
-
-  // 전송 조각이 도착한 순간에만 호출한다. 트로피 전체가 짧게 튕기며
-  // 해당 감정색으로 달아올라 "여기에 박혔다"는 종착점을 만든다.
-  impact(emotionIndex) {
-    this.pulse(emotionIndex);
-    this._impactAge = 0;
-    const color = RAMPS[emotionIndex][Math.min(3, RAMPS[emotionIndex].length - 1)];
-    this._impactColor.setRGB(color[0], color[1], color[2]);
-  }
-
-  setLive(liveE) {
-    this._liveE = liveE.slice();
-  }
-
-  setPixelRatio(value) {
-    this._uniforms.uPixelRatio.value = value;
-  }
-
-  // 마우스 휘휘 — 포인터 지점(로컬 좌표) 주변 입자를 소용돌이로 젓는다
-  stir(localPoint, amount) {
-    this._uniforms.uPointer.value.copy(localPoint);
-    this._swirl = Math.min(1.3, this._swirl + amount);
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // 입자 방출 — beats → 입자 (결정론 구간)
-  // ─────────────────────────────────────────────────────────
-  _rebuildAll() {
-    this._count = 0;
-    let prev = QUIET;
-    for (let t = 0; t < this.beats.length; t++) {
-      // birth를 과거로 두면 즉시 정착 상태 — 등장 연출은 uBurst가 담당
-      this._emitBeat(t, this.beats[t].e, prev, this._timeTicks, -1000);
-      prev = this.beats[t].e;
+    let prev = [BASELINE, BASELINE, BASELINE];
+    for (let i = 0; i < beats.length && this.materials.length < CAPACITY; i++) {
+      const beat = beats[i];
+      const delta = beat.e.map((v, k) => Math.max(0, v - prev[k] * DECAY));
+      let emotion = beat.kind === 'tap' ? 0 : beat.kind === 'single' ? 1 : beat.kind === 'hold' ? 2 : -1;
+      if (emotion < 0) {
+        const max = Math.max(...delta);
+        emotion = max > 0.08 ? delta.indexOf(max) : -1;
+      }
+      if (emotion >= 0) this.insertSphere(emotion, {}, true);
+      prev = beat.e;
     }
-    for (const name of Object.keys(FLOATS)) {
-      const attrName = name === 'pos' ? 'position' : 'a' + name[0].toUpperCase() + name.slice(1);
-      this.geometry.getAttribute(attrName).needsUpdate = true;
+    if (this.materials.length === 0) {
+      for (let i = 0; i < 9; i++) this.insertSphere(i % 3, {}, true);
     }
-    this.geometry.setDrawRange(0, this._count);
+    this._prepareCastFlow();
+    for (const item of this.materials) this._applySealedTransform(item);
+    this._setBodyState(1);
   }
 
-  _emitBeat(t, e, prev, N, birth) {
-    const u = t / Math.max(1, N - 1);
-
-    // 고요의 기록 — 옅은 샴페인 링이 아키타입 실루엣을 항상 지킨다 (§2.4)
-    this._emitQuiet(t, u, birth);
-
-    const dYes = Math.max(0, e[0] - prev[0] * DECAY);
-    const dNo = Math.max(0, e[1] - prev[1] * DECAY);
-    const lvlPlease = Math.max(0, e[2] - BASELINE) / (1 - BASELINE);
-
-    if (dYes > 0.02) this._emitSplat(t, u, Math.min(1, dYes * 2.6), birth);
-    if (dNo > 0.25) this._emitSeam(t, u, Math.min(1, dNo / 0.85), birth);
-    if (lvlPlease > 0.03) this._emitThread(t, u, lvlPlease, birth);
-  }
-
-  _pair(t, emo) {
-    const ramp = RAMPS[emo];
-    const k = Math.min(ramp.length - 2, Math.floor(rnd(this.seed, t, emo, 0, 7) * (ramp.length - 1)));
-    return [ramp[k], ramp[k + 1]];
-  }
-
-  _surface(u, theta, bump) {
-    const r = profileAt(u) * R_UNIT * (1 + bump);
-    return [r * Math.cos(theta), BASE_H + clamp01(u) * GLASS_H, r * Math.sin(theta)];
-  }
-
-  _push(home, spawn, birth, dur, size, colA, colB, mix, phaseV, energy) {
-    if (this._count >= MAX_PARTICLES) return;
-    const i = this._count++;
-    const b = this._buf;
-    b.pos.set(home, i * 3);
-    b.spawn.set(spawn, i * 3);
-    b.birth[i] = birth;
-    b.dur[i] = dur;
-    b.size[i] = size;
-    b.colA.set(colA, i * 3);
-    b.colB.set(colB, i * 3);
-    b.mix[i] = mix;
-    b.phase[i] = phaseV;
-    b.energy[i] = energy;
-  }
-
-  _emitQuiet(t, u, birth) {
-    // 고스트 메시가 실루엣을 담당하므로 고요 입자는 표면의 미광 더스트
-    const N = 90;
-    const tickH = GLASS_H / Math.max(1, this._timeTicks - 1);
-    for (let i = 0; i < N; i++) {
-      const theta = rnd(this.seed, t, 3, i, 1) * Math.PI * 2;
-      const du = (gauss(this.seed, t, 3, i, 2) * 0.5 * tickH) / GLASS_H;
-      const home = this._surface(u + du, theta, gauss(this.seed, t, 3, i, 3) * 0.006);
-      const j = gauss(this.seed, t, 3, i, 4) * 0.12;
-      const spawn = [home[0] + j, home[1] + gauss(this.seed, t, 3, i, 5) * 0.1, home[2] + j];
-      this._push(
-        home,
-        spawn,
-        birth + rnd(this.seed, t, 3, i, 6) * 0.3,
-        1.0,
-        2.0 + rnd(this.seed, t, 3, i, 8) * 1.0,
-        QUIET_PAIR[0],
-        QUIET_PAIR[1],
-        rnd(this.seed, t, 3, i, 9),
-        rnd(this.seed, t, 3, i, 10) * Math.PI * 2,
-        0.22
+  _prepareCastFlow() {
+    const span = Math.max(1, this.materials.length - 1);
+    for (const item of this.materials) {
+      // Chronology remains readable from bottom to top. The radial drift is
+      // restrained so every colour stays inside the calm outer silhouette.
+      const u = 0.34 + (item.index / span) * 0.58;
+      const angle = Math.atan2(item.target.z, item.target.x) + (rnd(this.seed, item.index, 41) - 0.5) * 0.5;
+      const radial = profileAt(u) * R_UNIT * (0.16 + rnd(this.seed, item.index, 42) * 0.2);
+      const direction = item.emotion === 0 ? 1.65 : item.emotion === 1 ? 2.1 : 2.55;
+      const halfHeight = 0.245 * item.size * direction;
+      const rawY = BASE_H + u * GLASS_H + (rnd(this.seed, item.index, 43) - 0.5) * 0.08;
+      const minY = BASE_H + GLASS_H * 0.31 + halfHeight;
+      const maxY = TOTAL_H - halfHeight - 0.1;
+      item.flow.set(
+        Math.cos(angle) * radial,
+        Math.max(minY, Math.min(maxY, rawY)),
+        Math.sin(angle) * radial
       );
     }
   }
 
-  // 좋아! — 스플랫: 주조선 위 한 점에서 터져 금빛 방울 클러스터로 정착 (§3)
-  _emitSplat(t, u, s, birth) {
-    // 대충 눌러도 풍성하게 — 탭 하나가 잔칫상처럼 보여야 한다
-    const N = Math.round(110 + 150 * s);
-    const [cA, cB] = this._pair(t, 0);
-    const thetaC = this._sector[0] + (rnd(this.seed, t, 0, 0, 11) * 2 - 1) * 1.15;
-    const tickH = GLASS_H / Math.max(1, this._timeTicks - 1);
-    const origin = this._surface(u, thetaC, 0.03);
-    for (let i = 0; i < N; i++) {
-      const dTheta = gauss(this.seed, t, 0, i, 12) * 0.26;
-      const du = (gauss(this.seed, t, 0, i, 13) * 1.6 * tickH) / GLASS_H;
-      const g = Math.exp(-(dTheta * dTheta) / 0.08 - (du * GLASS_H * du * GLASS_H) / (4 * tickH * tickH));
-      const bump = 0.04 + 0.17 * g + rnd(this.seed, t, 0, i, 14) * 0.03;
-      const home = this._surface(u + du, thetaC + dTheta, bump);
-      const spawn = [
-        origin[0] + gauss(this.seed, t, 0, i, 15) * 0.03,
-        origin[1] + gauss(this.seed, t, 0, i, 16) * 0.03,
-        origin[2] + gauss(this.seed, t, 0, i, 17) * 0.03,
-      ];
-      this._push(
-        home,
-        spawn,
-        birth + rnd(this.seed, t, 0, i, 18) * 0.08,
-        0.55 + 0.35 * rnd(this.seed, t, 0, i, 19),
-        4.6 + 3.6 * rnd(this.seed, t, 0, i, 20), // 방울은 크게 — 히어로 입자
+  pulse() {}
 
-        cA,
-        cB,
-        rnd(this.seed, t, 0, i, 21),
-        rnd(this.seed, t, 0, i, 22) * Math.PI * 2,
-        0.85 + 0.45 * s
-      );
-    }
+  impact() {
+    // A small compression is enough to show weight arriving; no blast or sparkle.
+    this._settlePulse = 1;
   }
 
-  // 안돼! — 시임: 바깥의 흩어진 점들이 붉은 세로 상처 하나로 스냅 (§3)
-  _emitSeam(t, u, s, birth) {
-    const N = Math.round(130 + 90 * s);
-    const [cA, cB] = this._pair(t, 1);
-    const thetaC = this._sector[1] + (rnd(this.seed, t, 1, 0, 23) * 2 - 1) * 0.85;
-    const tickH = GLASS_H / Math.max(1, this._timeTicks - 1);
-    for (let i = 0; i < N; i++) {
-      const dTheta = gauss(this.seed, t, 1, i, 24) * 0.05;
-      const du = (gauss(this.seed, t, 1, i, 25) * 3.0 * tickH) / GLASS_H;
-      const home = this._surface(u + du, thetaC + dTheta, -0.05 - rnd(this.seed, t, 1, i, 26) * 0.05);
-      const out = this._surface(u + du * 2, thetaC + gauss(this.seed, t, 1, i, 27) * 0.5, 0.3);
-      this._push(
-        home,
-        out,
-        birth + rnd(this.seed, t, 1, i, 28) * 0.05,
-        0.4 + 0.2 * rnd(this.seed, t, 1, i, 29),
-        3.2 + 2.2 * rnd(this.seed, t, 1, i, 30),
-        cA,
-        cB,
-        rnd(this.seed, t, 1, i, 31),
-        rnd(this.seed, t, 1, i, 32) * Math.PI * 2,
-        1.0
-      );
-    }
+  setLive() {}
+  setPixelRatio() {}
+  stir() {}
+
+  _setBodyState(progress) {
+    const p = smooth(progress);
+    this._shellMat.opacity = 0.2 + p * 0.42;
+    this._innerMat.opacity = 0.1 + p * 0.09;
+    this._rimMat.opacity = 0.44 + p * 0.18;
+    this._collarMat.opacity = 0.45 * (1 - p);
+    this._shellMat.roughness = 0.11 - p * 0.015;
+    this._shellMat.color.lerpColors(new THREE.Color(0xf2b06a), new THREE.Color(0xd9e4e5), clamp01((p - 0.35) / 0.65));
   }
 
-  // 제발! — 글로우 라인: 홀드하는 동안 얇게 빛나는 선이 트로피를 감아 올라간다.
-  // 틱마다 시작각이 전진해, 긴 홀드는 나선으로 감긴 한 줄의 실이 된다 (§3).
-  _emitThread(t, u, level, birth) {
-    // 촘촘하고 또렷한 나선 — 홀드한 시간이 한눈에 읽혀야 한다
-    const N = Math.round(150 + 110 * level);
-    const [cA, cB] = this._pair(t, 2);
-    const tickH = GLASS_H / Math.max(1, this._timeTicks - 1);
-    const thetaStart = this._sector[2] + t * 0.55; // 감아 올라가는 나선의 전진
-    const span = 0.7 + 0.6 * level;
-    for (let i = 0; i < N; i++) {
-      const along = i / Math.max(1, N - 1); // 선 위의 위치 0..1
-      const theta = thetaStart + along * span;
-      const du = (gauss(this.seed, t, 2, i, 34) * 0.08 * tickH) / GLASS_H; // 아주 팽팽하게
-      const home = this._surface(u + du, theta, 0.018 + rnd(this.seed, t, 2, i, 35) * 0.008);
-      const out = gauss(this.seed, t, 2, i, 36) * 0.14;
-      const spawn = [home[0] + home[0] * out * 0.3, home[1] + gauss(this.seed, t, 2, i, 37) * 0.08, home[2] + home[2] * out * 0.3];
-      this._push(
-        home,
-        spawn,
-        birth + along * 0.45, // 선이 "그려지듯" 진행 방향으로 태어난다
-        0.5,
-        2.8 + 1.2 * rnd(this.seed, t, 2, i, 40),
-        cA,
-        cB,
-        along, // 그라데이션이 선을 따라 흐른다
-        rnd(this.seed, t, 2, i, 42) * Math.PI * 2,
-        1.15 + 0.3 * level
-      );
-    }
+  _applySealedTransform(item) {
+    item.mesh.position.copy(item.flow);
+    const direction = item.emotion === 0 ? 1.65 : item.emotion === 1 ? 2.1 : 2.55;
+    const lateral = item.emotion === 0 ? 1.15 : item.emotion === 1 ? 0.78 : 0.94;
+    item.mesh.rotation.set(0, rnd(this.seed, item.index, 51) * Math.PI, (rnd(this.seed, item.index, 52) - 0.5) * 0.14);
+    item.mesh.scale.set(item.size * lateral, item.size * direction, item.size * (1.0 + rnd(this.seed, item.index, 30) * 0.18));
   }
 
-  // 라이브 중 부분 업로드 — 새로 태어난 입자 범위만 GPU로 보낸다
-  _flushRange(start, n) {
-    if (n <= 0) return;
-    for (const [name, itemSize] of Object.entries(FLOATS)) {
-      const attrName = name === 'pos' ? 'position' : 'a' + name[0].toUpperCase() + name.slice(1);
-      const attr = this.geometry.getAttribute(attrName);
-      attr.addUpdateRange(start * itemSize, n * itemSize);
-      attr.needsUpdate = true;
-    }
-    this.geometry.setDrawRange(0, this._count);
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // 프레임 업데이트 — 유니폼만 만진다
-  // ─────────────────────────────────────────────────────────
   update(timeSec) {
-    const dt = Math.min(0.1, Math.max(0, timeSec - this._lastT));
+    const dt = Math.min(0.08, Math.max(0, timeSec - this._lastT));
     this._lastT = timeSec;
     this._now = timeSec;
-    this._uniforms.uTime.value = timeSec;
 
-    // 잔향 감쇠: 좋아 짧고 밝게 / 안돼 탁 / 제발 길게 (§3)
-    const tau = [0.28, 0.5, 1.1];
-    for (let i = 0; i < 3; i++) this._imp[i] *= Math.exp(-dt / tau[i]);
-
-    this._swirl *= Math.exp(-dt / 0.55);
-    this._burst *= Math.exp(-dt / 0.5);
-    this._uniforms.uSwirl.value = this._swirl;
-    this._uniforms.uBurst.value = this._burst;
-
-    // 빠른 확대 → 작은 역방향 반동 → 제자리. 고스트 메시의 색 번쩍임도 함께 감쇠한다.
-    this._impactAge += dt;
-    if (this._impactAge < 1.15) {
-      const envelope = Math.exp(-this._impactAge / 0.28);
-      const pop = Math.sin(this._impactAge * 20) * envelope * 0.055;
-      this.group.scale.setScalar(1 + pop);
-      this._ghostFillMat.emissive.copy(this._impactColor);
-      this._ghostFillMat.emissiveIntensity = 0.08 + envelope * 0.68;
-      this._ghostWireMat.opacity = 0.16 + envelope * 0.22;
-    } else {
-      this.group.scale.setScalar(1);
-      this._ghostFillMat.emissive.setHex(0x111a35);
-      this._ghostFillMat.emissiveIntensity = 0.08;
-      this._ghostWireMat.opacity = 0.16;
-    }
-
-    if (this.live) {
-      const y = this.castFrontY();
-      const rr = profileAt(this.castU) * R_UNIT;
-      const impSum = this._imp[0] + this._imp[1] + this._imp[2];
-      const hold = clamp01((this._liveE[2] - BASELINE) / (1 - BASELINE));
-
-      this._moltenRing.position.y = y + 0.015;
-      this._moltenRing.scale.set(rr * 1.02, rr * 1.02, 1 + hold * 1.3 + impSum * 0.5);
-
-      // 입력 순간 주조선이 해당 감정 색으로 달아오른다 (§4 인과 사슬)
-      let cr = 1.0;
-      let cg = 0.72;
-      let cb = 0.3;
-      const deep = [RAMPS[0][3], RAMPS[1][2], RAMPS[2][3]];
-      for (let i = 0; i < 3; i++) {
-        const k = Math.min(1, this._imp[i]) * 0.8;
-        cr += (deep[i][0] * 1.25 - cr) * k;
-        cg += (deep[i][1] * 1.25 - cg) * k;
-        cb += (deep[i][2] * 1.25 - cb) * k;
+    if (this.mode === 'collecting') {
+      for (const item of this.materials) {
+        const age = timeSec - item.born;
+        if (age < 0 || age > 1.25) continue;
+        const fall = smooth(age / 0.78);
+        item.mesh.position.lerpVectors(new THREE.Vector3(0, TOTAL_H + 0.4, 0), item.target, fall);
+        if (age > 0.7) {
+          const bounceAge = age - 0.7;
+          item.mesh.position.y += Math.sin(bounceAge * 18) * Math.exp(-bounceAge * 8) * 0.055;
+          const squash = Math.sin(Math.min(1, bounceAge / 0.2) * Math.PI) * 0.12;
+          item.mesh.scale.set(item.size * (1 + squash), item.size * (1 - squash), item.size * (1 + squash));
+        }
       }
-      const glow = 0.75 + impSum * 0.7 + hold * 0.4;
-      this._ringMat.color.setRGB(Math.min(1, cr * glow), Math.min(1, cg * glow), Math.min(1, cb * glow));
-      this._ringMat.opacity = Math.min(1, 0.7 + impSum * 0.3);
-      this._moltenLight.position.y = y + 0.35;
-      this._moltenLight.intensity = 1.4 + impSum * 3.2 + hold * 1.2;
-    } else {
-      this._ringMat.opacity = Math.max(0, this._ringMat.opacity - dt * 1.6);
-      this._moltenLight.intensity = Math.max(0, this._moltenLight.intensity - dt * 6);
-      if (this._moltenGroup.visible && this._ringMat.opacity <= 0.01) this._moltenGroup.visible = false;
-      // 완성 순간 받침대 금띠가 한 번 빛난다 — 각인
-      this._flash *= Math.exp(-dt / 0.8);
-      this._bandMat.emissiveIntensity = 0.25 + this._flash * 1.6;
+      this._setBodyState(0);
+    } else if (this.mode === 'melting') {
+      this._castAge += dt;
+      const bodyP = clamp01((this._castAge - 0.35) / 4.5);
+      this._setBodyState(bodyP);
+      for (const item of this.materials) {
+        const heightU = clamp01((item.target.y - BASE_H) / GLASS_H);
+        const localP = smooth((this._castAge - 0.55 - heightU * 1.7) / 2.2);
+        item.mesh.position.lerpVectors(item.target, item.flow, localP);
+        const direction = item.emotion === 0 ? 1.65 : item.emotion === 1 ? 2.1 : 2.55;
+        const lateral = item.emotion === 0 ? 1.15 : item.emotion === 1 ? 0.78 : 0.94;
+        item.mesh.rotation.x *= 1 - localP * 0.12;
+        item.mesh.rotation.z *= 1 - localP * 0.12;
+        item.mesh.scale.set(
+          item.size * (1 + (lateral - 1) * localP),
+          item.size * (1 + (direction - 1) * localP),
+          item.size * (1 + rnd(this.seed, item.index, 30) * 0.18 * localP)
+        );
+      }
+      const heat = smooth(this._castAge / 1.25) * (1 - smooth((this._castAge - 2.65) / 2.0));
+      for (const mat of this._beadMaterials) {
+        mat.roughness = 0.13 - heat * 0.07 + smooth((this._castAge - 3.7) / 1.3) * 0.04;
+        mat.transmission = 0.12 + heat * 0.26;
+      }
+      if (this._castAge >= 5.2) {
+        this.mode = 'sealed';
+        this._setBodyState(1);
+        for (const mat of this._beadMaterials) {
+          mat.transmission = 0.24;
+          mat.roughness = 0.14;
+        }
+        for (const item of this.materials) this._applySealedTransform(item);
+      }
     }
+
+    // The whole object receives only a tiny weighted settling response.
+    this._settlePulse *= Math.exp(-dt / 0.24);
+    const settle = Math.sin(this._settlePulse * Math.PI) * this._settlePulse * 0.012;
+    this.group.scale.set(1 + settle, 1 - settle * 0.45, 1 + settle);
   }
 
   dispose() {
-    this.geometry.dispose();
-    this.material.dispose();
-    this._ghostGeom.dispose();
-    this._ghostEdgeGeom.dispose();
-    this._ghostFillMat.dispose();
-    this._ghostWireMat.dispose();
-    this._ringMat.dispose();
-    this._bandMat.dispose();
-    this._moltenRing.geometry.dispose();
-    this._baseGroup.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material && o.material !== this._bandMat) o.material.dispose();
+    this.group.traverse((object) => {
+      if (object.geometry && object.geometry !== this._beadGeom) object.geometry.dispose();
     });
+    this._beadGeom.dispose();
+    for (const material of [this._shellMat, this._innerMat, this._rimMat, this._collarMat, ...this._beadMaterials]) {
+      material.dispose();
+    }
+    this._baseGroup.traverse((object) => object.material?.dispose?.());
   }
 }
 

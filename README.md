@@ -1,15 +1,16 @@
-# 감정 조각 · Emotion Sculpture
+# 감정 트로피 · Emotion Trophy
 
 > Fans pour devotion — but the scoreboard only records goals.
 > **The real passion lives *between* the goals.** This project gives that
 > passion its first place to be recorded: on-chain, unforgeable, forever.
 
-While you watch a 3-minute highlight, molten golden glass rises from a pedestal
-and **casts a trophy in real time**. Your emotions can only touch the molten
-casting front at the top — then they solidify, permanently, into the layers
-below. Bottom = kickoff, rim = final whistle. When the clip ends the finished
-trophy is committed to **Solana devnet** as a deterministic hash — proof that
-*this* feeling was recorded at *this* moment.
+While you watch a 3-minute highlight, every reaction becomes a coloured glass
+bead and drops into an open trophy mould. The beads never disappear or turn
+into decorative particles. Cast at any moment (or let the full mould trigger it):
+the same beads soften from the bottom upward, overlap into coloured glass veins,
+and cool inside one calm cast-glass trophy. The result can be committed to
+**Solana devnet** as a deterministic hash — proof that *this* feeling was
+recorded at *this* moment.
 
 Goals go on the scoreboard; passion never got a trophy. Now every fan casts
 their own — and because everyone's emotional flow differs, **no two trophies
@@ -43,56 +44,53 @@ each with a *distinct, non-overlapping gesture* so you never have to learn how t
 | **안돼! (No)** | single tap (`F`) | anger / a blown call | red |
 | **제발! (Please)** | hold (`Space`) | tension / holding your breath | blue |
 
-The vertical axis is match time. All trophies share one fixed archetype profile
-`P(u)` (pedestal → stem → bowl → rim) — emotions modulate it only within
-±25%, so **any input distribution still reads as a beautiful trophy**. Each
-emotion is a different physical phenomenon, not a recolored button: joy blooms
-*outward* as gold droplets, anger bites *inward* as one deep red crease, tension
-swells as a long translucent blue band whose height is literally how long you
-held your breath. **Silence is not a bug — it's rhythm:** quiet stretches stay
-as clear, thin champagne glass, making the eruption that follows land harder.
+All trophies share one fixed, restrained archetype profile `P(u)` (pedestal →
+stem → bowl → rim). Emotion changes the internal colour history, never the calm
+outer silhouette: gold, red, and blue beads retain their insertion order from
+bottom to top, while dominance remains visible through how much of each colour
+was added. Beauty comes from glass transmission, thickness, refraction, and the
+preserved material record—not bloom, particles, or generated complexity.
 
 ### Demo
 - `npm install && npm run dev` → open `http://localhost:5173`
-- Press **▶ 경기 시작**, play any 3-min highlight in the embedded panel, and
+- Press **ENTER THE FOUNDRY**, play any 3-min highlight in the embedded panel, and
   react with `J` / `F` / `Space` (or the on-screen buttons).
-- Press **끝내기** (or let 3 min elapse) → the sculpture reveals, rotate it with
+- Press **CAST THE GLASS** (or fill the mould / let 3 min elapse) → the glass
+  melts and cools, then rotate the finished trophy with
   the mouse.
 - **Mint your memory** → check "실제 devnet에 커밋" for a real on-chain Memo
   transaction with a live Solana Explorer link.
 - **같은 경기, 다른 형상** → see a rival fan's inverted sculpture from the same match.
 
 ### The 15-second money shot (sound off, concept still reads)
-Molten gold rises from an empty pedestal → a blue **제발!** band swells around
-the stem → a red **안돼!** crease bites the bowl → gold **좋아!** droplets bloom
-as you hammer the tap → the rim fills, whistle, camera pulls back: the trophy is
-cast → the rival fan's trophy appears beside it — same archetype, opposite
-scars → **Mint** → devnet explorer link.
+Gold **좋아!**, red **안돼!**, and blue **제발!** glass beads visibly drop into
+the mould and accumulate → **Cast the glass** → heat moves upward through those
+same beads → their round forms soften into connected internal colour veins →
+the glass clears and cools → the camera pulls back on one preserved trophy →
+**Mint** → devnet explorer link.
 
 ---
 
 ## How I Built It
 
-**Stack:** Vite + vanilla JS + three.js (`BufferGeometry`, `OrbitControls`,
-`UnrealBloom`), `@solana/web3.js` on devnet.
+**Stack:** Vite + vanilla JS + three.js (`MeshPhysicalMaterial`,
+`LatheGeometry`, `OrbitControls`), `@solana/web3.js` on devnet.
 
-**The trophy (`src/trophy.js`)** — The trophy is an accumulation of up to 150k
-GPU particles over a fixed archetype profile `P(u)`. Every input *births*
-particles differently: a tap splats from a single point into a gold droplet
-cluster; an angry tap snaps scattered points inward into one red vertical seam;
-a hold condenses a cloud into a tight blue thread — one thread per tick you
-endured. Each event draws an origin→adjacent color pair from a gradient ramp,
-so nothing is flat-colored. Settling, shimmer, the finish shockwave and the
-mouse-stir (swirl the finished trophy and watch it scatter and re-gather) are
-all computed in the vertex shader — the CPU only writes new particle
-attributes at input time, so a full-spam match stays at 60 fps.
+**The trophy (`src/trophy.js`)** — The trophy accumulates up to 48 real glass
+bead meshes inside an open, physically shaded mould. Each bead has a stable
+packing position derived from its insertion order. Casting computes a second,
+still deterministic position inside the final glass volume, then animates each
+bead from a sphere into a short overlapping inclusion while the clear outer body
+thickens and cools. The colour volume is never uniformly averaged: order is read
+bottom-to-top, and the dominant emotion remains the dominant internal material.
 
 **Deterministic reproduction (`src/noise.js`, `src/session.js`)** — The whole
 "commit a hash on-chain to prove authenticity" claim only holds if the sculpture
 is 100% reproducible from its beats. So there is **zero `Math.random()`** — all
-texture jitter is a deterministic hash of `sessionSeed + tickIndex + vertexIndex`.
-Verified in a headless test: same beats + same seed → byte-identical vertex
-buffers (8,640 vertices), and the SHA-256 sculpture hash is stable.
+placement and flow jitter are deterministic hashes of `sessionSeed + inputIndex`.
+Verified in a headless test: same history + same seed → identical bead placement,
+flow, and colour order; over-input stops exactly at the physical mould capacity;
+and the SHA-256 sculpture hash includes the inserted-material history.
 
 **Solana, layered (`src/onchain.js`)** — A single `OnChainAdapter` interface with
 two implementations. `MockAdapter` runs the entire demo with no wallet.

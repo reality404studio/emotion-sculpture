@@ -2,7 +2,6 @@ import * as THREE from 'three';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const IMPACT_COLORS = [0xf5a524, 0xe4573d, 0x3b82f6];
-const MILESTONES = [0.25, 0.5, 0.75];
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const ease = (v) => {
   const t = clamp01(v);
@@ -24,8 +23,6 @@ export class CinematicDirector {
 
     this.mode = 'idle';
     this.age = 0;
-    this.nextMilestone = 0;
-    this.milestoneAge = 99;
     this.impactAge = 99;
     this.impactStrength = 0;
     this.impactEmotion = 0;
@@ -53,8 +50,6 @@ export class CinematicDirector {
   resetIdle(instant = false) {
     this.mode = 'idle';
     this.age = 0;
-    this.nextMilestone = 0;
-    this.milestoneAge = 99;
     this.impactAge = 99;
     this.controls.enabled = false;
     this.controls.autoRotate = false;
@@ -75,8 +70,6 @@ export class CinematicDirector {
   beginLive() {
     this.mode = 'live';
     this.age = 0;
-    this.nextMilestone = 0;
-    this.milestoneAge = 99;
     this.impactAge = 99;
     this.controls.enabled = false;
     this.controls.autoRotate = false;
@@ -85,7 +78,7 @@ export class CinematicDirector {
   impact(emotion, worldY) {
     this.impactEmotion = emotion;
     this.impactAge = 0;
-    this.impactStrength = Math.min(1.25, this.impactStrength + (emotion === 2 ? 0.45 : 0.8));
+    this.impactStrength = Math.min(0.28, this.impactStrength + 0.12);
     this.lights.impact.color.setHex(IMPACT_COLORS[emotion]);
     this.lights.impact.position.set(0, worldY + 0.08, 1.35);
   }
@@ -132,7 +125,6 @@ export class CinematicDirector {
     const step = Math.min(0.05, Math.max(0, dt));
     this.age += step;
     this.impactAge += step;
-    this.milestoneAge += step;
 
     if (this.mode === 'live') this._updateLive(step, progress, castY);
     else if (this.mode === 'reveal') this._updateReveal(step);
@@ -140,7 +132,7 @@ export class CinematicDirector {
     else this._updateStableLights(step);
 
     this.impactStrength *= Math.exp(-step / 0.32);
-    this.lights.impact.intensity = 4.4 * this.impactStrength * Math.exp(-this.impactAge / 0.24);
+    this.lights.impact.intensity = 1.15 * this.impactStrength * Math.exp(-this.impactAge / 0.32);
   }
 
   _updateIdle(dt) {
@@ -156,11 +148,6 @@ export class CinematicDirector {
   }
 
   _updateLive(dt, progress, castY) {
-    if (this.nextMilestone < MILESTONES.length && progress >= MILESTONES[this.nextMilestone]) {
-      this.nextMilestone++;
-      this.milestoneAge = 0;
-    }
-
     const intro = ease(this.age / 1.15);
     const portrait = this.viewport.portrait;
     const angle = (portrait ? 0.1 : 0.22) - progress * (portrait ? 0.18 : 0.32);
@@ -168,34 +155,20 @@ export class CinematicDirector {
     // 주조선을 추적하되 몰드 전체는 프레임 안에 둔다. 형상이 자라는 과정이 먼저 읽혀야 한다.
     let targetY = (portrait ? 2.28 : 2.2) + (castY - this.baseHeight) * (portrait ? 0.055 : 0.08);
     const builtCenter = (this.baseHeight + castY) * 0.5;
-    const milestonePulse = this.milestoneAge < 1.05 ? Math.sin((this.milestoneAge / 1.05) * Math.PI) : 0;
-    distance += milestonePulse * (portrait ? 1.1 : 2.0);
-    targetY += (builtCenter - targetY) * milestonePulse * (portrait ? 0.38 : 0.72);
+    targetY += (builtCenter - targetY) * 0.12;
 
     this.livePos.set(Math.sin(angle) * distance, targetY + 0.34, Math.cos(angle) * distance);
     this.liveTarget.set(0, targetY, 0);
     this.goalPos.set(portrait ? 0.85 : 1.7, portrait ? 2.62 : 2.42, portrait ? 8.9 : 8.15).lerp(this.livePos, intro);
     this.goalTarget.set(0, portrait ? 2.3 : 2.15, 0).lerp(this.liveTarget, intro);
 
-    // 충돌 프레임에만 작은 반동. 이동 중에는 카메라를 흔들지 않는다.
-    if (this.impactAge < 0.75 && this.impactStrength > 0.01) {
-      const envelope = Math.exp(-this.impactAge / 0.2) * this.impactStrength;
-      const kick = Math.sin(this.impactAge * 22) * envelope;
-      this.view.subVectors(this.goalTarget, this.goalPos).normalize();
-      this.tangent.crossVectors(this.view, UP).normalize();
-      const motionScale = this.viewport.compact ? 0.58 : 1;
-      if (this.impactEmotion === 0) this.goalPos.addScaledVector(this.view, kick * 0.18 * motionScale);
-      else if (this.impactEmotion === 1) this.goalPos.addScaledVector(this.tangent, kick * 0.12 * motionScale);
-      else this.goalPos.y += envelope * 0.065 * motionScale;
-    }
-
-    this._moveCamera(dt, (portrait ? 43 : 39.5) - milestonePulse * (portrait ? 0.6 : 1.2), 5.4);
+    this._moveCamera(dt, portrait ? 43 : 39.5, 3.2);
     this.lights.casting.position.set(1.15, castY + 0.22, 1.85);
     this._setLightTargets('live', dt);
   }
 
   _updateReveal(dt) {
-    const t = ease(this.age / 2.05);
+    const t = ease(this.age / 5.05);
     const portrait = this.viewport.portrait;
     const angle = portrait ? 0.16 : 0.3;
     const distance = portrait ? 9.8 : 8.15;
@@ -203,18 +176,17 @@ export class CinematicDirector {
     this.heroPos.set(Math.sin(angle) * distance, portrait ? 2.25 : this.totalHeight * 0.58, Math.cos(angle) * distance);
     this.goalPos.lerpVectors(this.revealFromPos, this.heroPos, t);
     this.goalTarget.lerpVectors(this.revealFromTarget, this.heroTarget, t);
-    this._moveCamera(dt, portrait ? 42 : 37, 8.0);
+    this._moveCamera(dt, portrait ? 42 : 37, 2.2);
 
-    const dark = this.age < 0.16
-      ? 1 - ease(this.age / 0.16) * 0.82
-      : 0.18 + ease((this.age - 0.16) / 0.72) * 0.82;
-    // 완성 컷은 일반적인 댐핑보다 빠르게 노출을 내려 실제 암전으로 읽히게 한다.
-    this._setLightTargets('result', 1, dark);
-    const sweepT = clamp01((this.age - 0.14) / 0.88);
-    this.lights.sweep.position.set(0.25, this.baseHeight + sweepT * (this.totalHeight - this.baseHeight), 1.6);
-    this.lights.sweep.intensity = Math.sin(sweepT * Math.PI) * 10.5;
+    // The warm working light rises with the softening front, then fades as the glass cools.
+    const heatT = clamp01((this.age - 0.35) / 3.2);
+    const cooling = 1 - ease((this.age - 3.45) / 1.55);
+    this._setLightTargets('result', dt);
+    this.lights.casting.position.set(0.5, this.baseHeight + heatT * (this.totalHeight - this.baseHeight), 1.4);
+    this.lights.casting.intensity = 2.2 * cooling;
+    this.lights.sweep.intensity = 0;
 
-    if (this.age >= 2.15) this.showResult(false);
+    if (this.age >= 5.2) this.showResult(false);
   }
 
   _updateStableLights(dt) {
@@ -233,10 +205,10 @@ export class CinematicDirector {
   _setLightTargets(sceneMode, dt, scale = 1) {
     const k = dt >= 1 ? 1 : damp(4.8, dt);
     const targets = sceneMode === 'idle'
-      ? { ambient: 0.12, key: 0.42, rim: 2.05, fill: 0.12, stage: 0.88, casting: 0, exposure: 0.93, bloom: 0.22 }
+      ? { ambient: 0.16, key: 0.48, rim: 1.55, fill: 0.18, stage: 0.8, casting: 0, exposure: 0.98, bloom: 0.08 }
       : sceneMode === 'live'
-        ? { ambient: 0.17, key: 0.86, rim: 2.45, fill: 0.28, stage: 1.55, casting: 2.5, exposure: 1.0, bloom: 0.38 }
-        : { ambient: 0.22, key: 1.18, rim: 2.75, fill: 0.46, stage: 1.25, casting: 0, exposure: 1.03, bloom: 0.42 };
+        ? { ambient: 0.21, key: 0.92, rim: 1.9, fill: 0.34, stage: 1.2, casting: 0.65, exposure: 1.02, bloom: 0.1 }
+        : { ambient: 0.27, key: 1.2, rim: 2.1, fill: 0.52, stage: 1.05, casting: 0, exposure: 1.06, bloom: 0.12 };
 
     for (const name of ['ambient', 'key', 'rim', 'fill', 'stage', 'casting']) {
       const target = targets[name] * scale;

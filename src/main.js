@@ -1,5 +1,5 @@
-// 감정 조각 — 오케스트레이터.
-// Phase 흐름: idle → live(자라남) → result(박제) → compare(비교).
+// 감정 유리 주조 — 오케스트레이터.
+// Phase 흐름: idle → live(유리구슬 축적) → casting(용융/냉각) → result(보존).
 import './polyfills.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -150,10 +150,9 @@ scene.add(floor);
 const stageRing = new THREE.Mesh(
   new THREE.TorusGeometry(2.05, 0.012, 8, 128),
   new THREE.MeshBasicMaterial({
-    color: 0x617cff,
+    color: 0x9aa5a2,
     transparent: true,
-    opacity: 0.2,
-    blending: THREE.AdditiveBlending,
+    opacity: 0.1,
     depthWrite: false,
   })
 );
@@ -162,16 +161,17 @@ stageRing.position.y = 0.008;
 scene.add(stageRing);
 
 const atmosphere = new FoundryAtmosphere({ density: viewport.compact ? 0.62 : 1 });
-scene.add(atmosphere.group);
+// The atmosphere system remains available for future environments, but this
+// casting scene deliberately contains no decorative particle field.
 
-// 블룸 — 파티클과 주조선이 물리적으로 빛나게 (다크 스테이지 전제)
+// 블룸은 재질을 대신하지 않는다. 가장 밝은 유리 하이라이트에만 약하게 남긴다.
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.5,
-  0.72,
-  0.55
+  0.14,
+  0.35,
+  0.82
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
@@ -332,6 +332,7 @@ function startMatch() {
   session = createSession();
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
   session.stats = { yesTaps: 0, noTaps: 0, holdMs: 0 };
+  session.materials = [];
   if (sculpture) {
     scene.remove(sculpture.group);
     sculpture.dispose();
@@ -339,13 +340,12 @@ function startMatch() {
   sculpture = new Trophy(sessionSeed(session));
   sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
-  // live 시간 매핑: 3분 = 트로피 전체 높이 (조기 종료 시 finishCast가 재정규화)
-  sculpture.beginLive(Math.round(SESSION_MS / TICK_MS));
+  sculpture.beginLive();
 
   input = new InputController({
     onVisualPulse: (emo, detail) => {
       flashButton(emo);
-      launchCastParticle(emo, detail);
+      launchGlassBead(emo, detail);
       if (emo === 0) session.stats.yesTaps++;
       if (emo === 1) session.stats.noTaps++;
     },
@@ -363,7 +363,7 @@ function startMatch() {
   endBtn.hidden = false;
   palette.hidden = false;
   resultEl.hidden = true;
-  phaseTag.textContent = 'CASTING / MATERIAL IN MOTION';
+  phaseTag.textContent = 'COLLECTING / GLASS IN MOLD';
   document.body.classList.add('is-live');
   // 점화 클로즈업에서 시작해 주조선과 함께 올라가는 카메라·조명 시퀀스.
   cinematic.beginLive();
@@ -374,7 +374,7 @@ function startMatch() {
 // ─────────────────────────────────────────────────────────────
 async function endMatch() {
   if (phase !== 'live') return;
-  phase = 'result';
+  phase = 'casting';
   const finishingSession = session;
   input.disable();
   castFeedback.replaceChildren();
@@ -384,25 +384,26 @@ async function endMatch() {
   document.body.classList.add('is-result');
   resetResultPanel();
 
-  // 종료 휘슬 = 주조 완료. 남은 재료가 마저 부어지고 상단 돔이 닫힌다 (§2.2)
+  // 같은 구슬들이 아래에서 위로 연화되고 겹쳐진 뒤 투명한 한 몸으로 냉각된다.
   sculpture.finishCast();
-  atmosphere.reveal();
   revealCamera();
   window.setTimeout(() => {
-    if (phase !== 'result' || session !== finishingSession) return;
+    if (phase !== 'casting' || session !== finishingSession) return;
+    phase = 'result';
     document.body.classList.remove('is-revealing');
     resultEl.hidden = false;
     if (ruler) ruler.group.visible = !viewport.portrait;
-  }, 2200);
+    phaseTag.textContent = 'COOLED / MOVE TO INSPECT';
+  }, 5400);
 
   session.signatureHash = await computeSculptureHash(session);
   saveSession(session);
 
   endBtn.hidden = true;
   palette.hidden = true;
-  phaseTag.textContent = 'SEALED / MOVE TO INSPECT';
+  phaseTag.textContent = 'MELTING / FUSING / COOLING';
 
-  $('#r-beats').textContent = String(session.beats.length);
+  $('#r-beats').textContent = `${session.materials.length} beads`;
   $('#r-hash').textContent = session.signatureHash.slice(0, 24) + '…';
   $('#r-duration').textContent = fmtTime(elapsed);
   $('#mint-status').textContent = '';
@@ -443,7 +444,7 @@ function fillReport(durationMs) {
 }
 
 function revealCamera() {
-  // 짧은 암전 → 아래에서 위로 훑는 광선 → 전체 형상을 드러내는 히어로 풀백.
+  // 변형을 계속 바라보며 천천히 전체 형상으로 물러난다.
   cinematic.finish();
 }
 
@@ -458,12 +459,12 @@ function flashButton(emo) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 입력 인과 사슬 — 버튼에서 태어난 빛 조각이 실제 3D 주조선까지 날아간 뒤 충돌한다.
-// 버튼 반응과 트로피 반응을 같은 프레임에 터뜨리지 않고, 이동 시간을 사이에 둔다.
+// 입력 인과 사슬 — 버튼에서 집어 든 유리구슬이 몰드 입구까지 이동하고,
+// 그 자리에서 실제 3D 구슬이 되어 내부로 떨어진다.
 // ─────────────────────────────────────────────────────────────
-function castTargetScreen(lift = 0) {
+function castTargetScreen() {
   if (!sculpture) return { x: window.innerWidth / 2, y: window.innerHeight * 0.48 };
-  const local = new THREE.Vector3(0, sculpture.castFrontY() + 0.08 + lift, 0);
+  const local = new THREE.Vector3(0, BASE_H + GLASS_H + 0.08, 0);
   const world = sculpture.group.localToWorld(local);
   const ndc = world.project(camera);
   return {
@@ -472,27 +473,29 @@ function castTargetScreen(lift = 0) {
   };
 }
 
-function showCastImpact(point, emo, soundVoice) {
-  const impact = document.createElement('span');
-  impact.className = `cast-impact cast-impact--${emo}`;
-  impact.style.setProperty('--cast-color', CAST_COLORS[emo]);
-  impact.style.left = `${point.x}px`;
-  impact.style.top = `${point.y}px`;
-  impact.innerHTML = '<i></i><b>✦</b>';
-  castFeedback.appendChild(impact);
-  impact.addEventListener('animationend', (ev) => {
-    if (ev.target === impact) impact.remove();
-  });
-
+function placeGlassBead(emo, detail, soundVoice) {
   if (phase === 'live' && sculpture) {
-    sculpture.impact(emo);
-    cinematic.impact(emo, sculpture.castFrontY());
-    atmosphere.impact(sculpture.castFrontY());
+    const countBefore = sculpture.materials.length;
+    const isFull = sculpture.insertSphere(emo, detail);
+    if (sculpture.materials.length > countBefore) {
+      session.materials.push({
+        emotion: emo,
+        atMs: Math.round(elapsed),
+        holdStep: detail.holdStep || 0,
+      });
+      sculpture.impact(emo);
+      cinematic.impact(emo, sculpture.castFrontY());
+    }
+    if (isFull && !session.autoCastQueued) {
+      session.autoCastQueued = true;
+      phaseTag.textContent = 'MOLD FULL / CASTING';
+      window.setTimeout(() => endMatch(), 900);
+    }
   }
   castSound.impact(emo, soundVoice);
 }
 
-function launchCastParticle(emo, detail = {}) {
+function launchGlassBead(emo, detail = {}) {
   if (phase !== 'live' || !sculpture) return;
   const btn = palette.querySelector(`[data-emo="${emo}"]`);
   if (!btn) return;
@@ -500,7 +503,7 @@ function launchCastParticle(emo, detail = {}) {
   const rect = btn.getBoundingClientRect();
   const start = { x: rect.left + rect.width / 2, y: rect.top + 8 };
   const orb = document.createElement('span');
-  orb.className = `cast-orb cast-orb--${emo}`;
+  orb.className = `cast-bead cast-bead--${emo}`;
   orb.style.setProperty('--cast-color', CAST_COLORS[emo]);
   orb.innerHTML = '<i></i>';
   castFeedback.appendChild(orb);
@@ -510,10 +513,8 @@ function launchCastParticle(emo, detail = {}) {
   btn._sendingTimer = window.setTimeout(() => btn.classList.remove('sending'), 420);
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const duration = reduceMotion ? 240 : emo === 2 ? 500 : 620;
+  const duration = reduceMotion ? 240 : emo === 2 ? 520 : 600;
   const bornAt = performance.now();
-  // HOLD 재료는 1초 안에도 착지점이 눈에 띄게 상승한다. 한 번의 홀드가 끝나면 0부터 다시 시작한다.
-  const targetLift = emo === 2 ? Math.min(1.15, (detail.holdStep || 0) * 0.16) : 0;
   const sourcePan = clampScreenPan(start.x);
   const soundVoice = castSound.launch(emo, detail, { duration: duration / 1000, pan: sourcePan });
 
@@ -521,10 +522,10 @@ function launchCastParticle(emo, detail = {}) {
     if (!orb.isConnected) return;
     const raw = Math.min(1, (now - bornAt) / duration);
     const t = 1 - Math.pow(1 - raw, 3);
-    const target = castTargetScreen(targetLift);
+    const target = castTargetScreen();
     const control = {
       x: start.x + (target.x - start.x) * 0.34,
-      y: Math.min(start.y, target.y) - (reduceMotion ? 24 : 112),
+      y: Math.min(start.y, target.y) - (reduceMotion ? 18 : 48),
     };
     const omt = 1 - t;
     const x = omt * omt * start.x + 2 * omt * t * control.x + t * t * target.x;
@@ -532,7 +533,7 @@ function launchCastParticle(emo, detail = {}) {
     const dx = 2 * omt * (control.x - start.x) + 2 * t * (target.x - control.x);
     const dy = 2 * omt * (control.y - start.y) + 2 * t * (target.y - control.y);
     const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-    const scale = 0.72 + Math.sin(Math.PI * raw) * 0.5 + raw * 0.18;
+    const scale = 0.82 + Math.sin(Math.PI * raw) * 0.08 - raw * 0.12;
 
     orb.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${angle}deg) scale(${scale})`;
     orb.style.opacity = String(Math.min(1, raw * 8));
@@ -543,7 +544,7 @@ function launchCastParticle(emo, detail = {}) {
     }
 
     orb.remove();
-    if (phase === 'live') showCastImpact(target, emo, soundVoice);
+    if (phase === 'live') placeGlassBead(emo, detail, soundVoice);
   }
 
   requestAnimationFrame(fly);
@@ -603,9 +604,8 @@ function animate() {
       acc -= TICK_MS;
       tick();
     }
-    const p = Math.min(1, elapsed / SESSION_MS);
-    liveProgress = p;
-    sculpture.setCastProgress(p);
+    sculpture.setCastProgress();
+    liveProgress = sculpture.castU;
 
     if (elapsed >= SESSION_MS) endMatch();
   }
@@ -625,71 +625,6 @@ function animate() {
   composer.render();
 }
 animate();
-
-// ─────────────────────────────────────────────────────────────
-// 마우스 휘휘 — 완성된 트로피의 입자를 저으면 흩어졌다 홈으로 모인다
-// ─────────────────────────────────────────────────────────────
-const stirRay = new THREE.Raycaster();
-const stirNdc = new THREE.Vector2();
-const stirHit = new THREE.Vector3();
-let lastStirX = 0;
-let lastStirY = 0;
-let lastStirAt = 0;
-let lastStirDx = 0;
-let lastStirDy = 0;
-canvas.addEventListener('pointermove', (ev) => {
-  const now = performance.now();
-  const dx = ev.clientX - lastStirX;
-  const dy = ev.clientY - lastStirY;
-  const continuous = lastStirAt > 0 && now - lastStirAt < 150;
-  const speed = continuous ? Math.min(1, Math.hypot(dx, dy) / 42) : 0;
-  lastStirX = ev.clientX;
-  lastStirY = ev.clientY;
-  lastStirAt = now;
-  if (phase !== 'result' && phase !== 'compare') {
-    lastStirDx = 0;
-    lastStirDy = 0;
-    return;
-  }
-  if (speed < 0.02) return;
-
-  const previousLength = Math.hypot(lastStirDx, lastStirDy);
-  const currentLength = Math.hypot(dx, dy);
-  const directionDot = previousLength > 0 && currentLength > 0
-    ? (dx * lastStirDx + dy * lastStirDy) / (previousLength * currentLength)
-    : 1;
-  const sharpTurn = speed > 0.2 && previousLength > 4 && directionDot < -0.12;
-  lastStirDx = dx;
-  lastStirDy = dy;
-
-  stirNdc.set((ev.clientX / window.innerWidth) * 2 - 1, -(ev.clientY / window.innerHeight) * 2 + 1);
-  stirRay.setFromCamera(stirNdc, camera);
-  const targets = phase === 'compare' ? compareTrophies : sculpture ? [sculpture] : [];
-  let stirred = false;
-  let stirHeight = 0;
-  for (const trophy of targets) {
-    // 트로피 축을 지나고 카메라를 향하는 평면과 레이의 교점 = 젓는 지점
-    const axis = new THREE.Vector3();
-    trophy.group.getWorldPosition(axis);
-    axis.y = controls.target.y;
-    const normal = new THREE.Vector3().subVectors(camera.position, axis).setY(0).normalize();
-    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, axis);
-    if (stirRay.ray.intersectPlane(plane, stirHit)) {
-      const localPoint = trophy.group.worldToLocal(stirHit.clone());
-      trophy.stir(localPoint, speed * 0.45);
-      stirHeight = Math.max(stirHeight, Math.max(0, Math.min(1, (localPoint.y - BASE_H) / GLASS_H)));
-      stirred = true;
-    }
-  }
-  if (stirred) {
-    castSound.stir({
-      speed,
-      pan: clampScreenPan(ev.clientX),
-      height: stirHeight,
-      turn: sharpTurn,
-    });
-  }
-});
 
 // ─────────────────────────────────────────────────────────────
 // 박제 (§10)

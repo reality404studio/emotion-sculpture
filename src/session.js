@@ -40,7 +40,10 @@ function canonicalBeats(session) {
     const e = b.e.map((v) => Math.round(v * 1000) / 1000);
     return `${b.t}|${e[0]},${e[1]},${e[2]}|${b.kind}`;
   });
-  return `${session.id}\n${session.matchLabel}\n${rows.join('\n')}`;
+  const materials = (session.materials || []).map((item) =>
+    `${item.emotion}|${Math.round(item.atMs || 0)}|${item.holdStep || 0}`
+  );
+  return `${session.id}\n${session.matchLabel}\n${rows.join('\n')}\nmaterials\n${materials.join('\n')}`;
 }
 
 // 결정론적 sculpture hash (SHA-256) — 온체인 커밋/진위 증명용 (§5.7, §8)

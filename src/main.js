@@ -3,6 +3,7 @@
 import './polyfills.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -71,14 +72,18 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.02;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// Museum studio — a lifted neutral background gives thick glass something to refract.
-renderer.setClearColor(0x151817, 1);
+// Bright gallery studio: glass is defined by what it reflects and refracts.
+renderer.setClearColor(0xf3f2ee, 1);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x151817);
-scene.fog = new THREE.FogExp2(0x151817, 0.011);
+scene.background = new THREE.Color(0xf3f2ee);
+scene.fog = new THREE.Fog(0xf3f2ee, 15, 34);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.032).texture;
+pmrem.dispose();
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 2.3, 8.4);
@@ -92,34 +97,41 @@ controls.maxDistance = 14;
 controls.autoRotate = false;
 controls.target.set(0, 2.05, 0);
 
-// 검은 주조실 — 아이보리 키와 코발트 림이 유리의 두께만 드러낸다.
-const ambient = new THREE.HemisphereLight(0xe5ece7, 0x111412, 0.28);
+// Museum-object lighting: broad neutral reflections plus a restrained cool edge.
+const ambient = new THREE.HemisphereLight(0xffffff, 0xb8c0bd, 0.72);
 scene.add(ambient);
 
-const key = new THREE.DirectionalLight(0xfff8e8, 0.8);
+const key = new THREE.DirectionalLight(0xfffdf7, 1.65);
 key.position.set(4.8, 8.5, 6.2);
 key.castShadow = true;
-key.shadow.mapSize.set(1024, 1024);
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.bias = -0.00025;
+key.shadow.normalBias = 0.025;
+key.shadow.radius = 3;
+key.shadow.camera.left = -4;
+key.shadow.camera.right = 4;
+key.shadow.camera.top = 7;
+key.shadow.camera.bottom = -1;
 key.target.position.set(0, 2, 0);
 
-const rim = new THREE.DirectionalLight(0xa9c4ff, 1.65);
+const rim = new THREE.DirectionalLight(0xb9d5ff, 2.45);
 rim.position.set(-5.5, 6.5, -6.5);
 rim.target.position.set(0, 2.2, 0);
 
-const fill = new THREE.PointLight(0xeaf2ed, 0.42, 18, 2);
+const fill = new THREE.PointLight(0xffffff, 0.9, 18, 2);
 fill.position.set(4.2, 2.5, 4.4);
 
-const stage = new THREE.SpotLight(0xfff7e8, 1.1, 18, 0.32, 0.92, 1.5);
+const stage = new THREE.SpotLight(0xfffbef, 1.55, 18, 0.38, 0.94, 1.35);
 stage.position.set(0, 7.5, 3.5);
 stage.target.position.set(0, 0.15, 0);
 
 const casting = new THREE.PointLight(0xff9d35, 0, 4.6, 2);
 const impactLight = new THREE.PointLight(0xffffff, 0, 2.8, 2);
 const sweepLight = new THREE.PointLight(0xffe5ba, 0, 8.5, 1.6);
-const glassKey = new THREE.RectAreaLight(0xc4d5ff, 4.8, 2.2, 5.8);
+const glassKey = new THREE.RectAreaLight(0xd6e4ff, 6.2, 2.5, 6.4);
 glassKey.position.set(-3.7, 3.1, -2.6);
 glassKey.lookAt(0, 2.2, 0);
-const glassEdge = new THREE.RectAreaLight(0xfff7e4, 3.4, 1.4, 4.8);
+const glassEdge = new THREE.RectAreaLight(0xfff9ec, 4.6, 1.8, 5.4);
 glassEdge.position.set(3.8, 2.8, 1.4);
 glassEdge.lookAt(0, 2.1, 0);
 scene.add(
@@ -137,10 +149,10 @@ scene.add(
   glassEdge
 );
 
-// 무광 주조실 바닥. 경기장 언어는 영상에만 남기고 무대는 하나의 재료 체계로 통일한다.
+// Warm-white seamless studio floor with a quiet contact shadow.
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 40),
-  new THREE.MeshStandardMaterial({ color: 0x171a19, roughness: 0.72, metalness: 0.04 })
+  new THREE.MeshStandardMaterial({ color: 0xe9e7e1, roughness: 0.82, metalness: 0 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.035;
@@ -149,17 +161,17 @@ scene.add(floor);
 
 const studioBackdrop = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 20),
-  new THREE.MeshBasicMaterial({ color: 0x222725 })
+  new THREE.MeshBasicMaterial({ color: 0xf3f2ee })
 );
-studioBackdrop.position.set(0, 8, -6);
+studioBackdrop.position.set(0, 8, -7.5);
 scene.add(studioBackdrop);
 
 const stageRing = new THREE.Mesh(
   new THREE.TorusGeometry(2.05, 0.012, 8, 128),
   new THREE.MeshBasicMaterial({
-    color: 0x9aa5a2,
+    color: 0x8f9996,
     transparent: true,
-    opacity: 0.1,
+    opacity: 0.055,
     depthWrite: false,
   })
 );
@@ -170,14 +182,14 @@ const atmosphere = new FoundryAtmosphere({ density: viewport.compact ? 0.62 : 1 
 // The atmosphere system remains available for future environments, but this
 // casting scene deliberately contains no decorative particle field.
 
-// 블룸은 재질을 대신하지 않는다. 가장 밝은 유리 하이라이트에만 약하게 남긴다.
+// Bloom is nearly absent; the glass must work through optics and lighting alone.
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.14,
-  0.35,
-  0.82
+  0.035,
+  0.22,
+  1.02
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());

@@ -98,12 +98,15 @@ function makePhysicalGlass(color, options = {}) {
     metalness: 0,
     roughness: options.roughness ?? 0.1,
     transmission: options.transmission ?? 0.9,
-    thickness: options.thickness ?? 2.2,
-    ior: 1.46,
+    thickness: options.thickness ?? 2.6,
+    ior: 1.48,
     clearcoat: 1,
-    clearcoatRoughness: 0.055,
-    attenuationDistance: 3.8,
-    attenuationColor: new THREE.Color(0xd7e2df),
+    clearcoatRoughness: 0.035,
+    attenuationDistance: 4.8,
+    attenuationColor: new THREE.Color(0xe8f1ee),
+    envMapIntensity: options.envMapIntensity ?? 1.45,
+    specularIntensity: 1,
+    specularColor: new THREE.Color(0xffffff),
     transparent: true,
     opacity: options.opacity ?? 0.42,
     depthWrite: false,
@@ -174,10 +177,11 @@ export class Trophy {
     this._bodyGroup = new THREE.Group();
     this._bodyGeom = makeTrophyGeometry();
     this._glassMat = makePhysicalGlass(0xdce5e1, {
-      opacity: 0.42,
-      transmission: 0.94,
-      roughness: 0.12,
-      thickness: 2.5,
+      opacity: 0.34,
+      transmission: 0.96,
+      roughness: 0.1,
+      thickness: 3.1,
+      envMapIntensity: 1.65,
     });
 
     this._glassMat.onBeforeCompile = (shader) => {
@@ -261,10 +265,11 @@ export class Trophy {
     };
 
     this._rimMat = makePhysicalGlass(0xe6eeeb, {
-      opacity: 0.64,
-      transmission: 0.88,
-      roughness: 0.075,
-      thickness: 0.42,
+      opacity: 0.58,
+      transmission: 0.92,
+      roughness: 0.06,
+      thickness: 0.48,
+      envMapIntensity: 1.8,
     });
     this._rim = new THREE.Mesh(
       new THREE.TorusGeometry(upperProfileAt(1) * R_UNIT, 0.032, 16, 128),
@@ -524,11 +529,12 @@ export class Trophy {
 
   _setBodyState(progress) {
     const p = smooth(progress);
-    this._glassMat.opacity = 0.42 + p * 0.3;
-    this._glassMat.roughness = 0.12 - p * 0.055;
-    this._glassMat.transmission = 0.94 - p * 0.1;
-    this._rimMat.opacity = 0.64 + p * 0.2;
-    this._rimMat.roughness = 0.075 - p * 0.02;
+    this._glassMat.opacity = 0.34 + p * 0.66;
+    this._glassMat.roughness = 0.1 - p * 0.07;
+    this._glassMat.transmission = 0.96 - p * 0.08;
+    this._glassMat.thickness = 2.45 + p * 0.65;
+    this._rimMat.opacity = 0.58 + p * 0.4;
+    this._rimMat.roughness = 0.06 - p * 0.025;
     this._collarMat.opacity = 0.32 * (1 - p);
   }
 
@@ -566,12 +572,14 @@ export class Trophy {
       }
       for (const item of this.materials) {
         const collapse = smooth((this._castAge - 0.38 - item.index * 0.008) / 1.55);
-        const scale = item.size * (1 - collapse * 0.94);
-        item.mesh.scale.setScalar(Math.max(0.02, scale));
+        const vanish = smooth((this._castAge - 1.1 - item.index * 0.006) / 1.0);
+        const radial = item.size * (1 - collapse * 0.9);
+        const vertical = item.size * (1 + collapse * 3.8) * (1 - vanish * 0.9);
+        item.mesh.scale.set(Math.max(0.025, radial), Math.max(0.025, vertical), Math.max(0.025, radial));
       }
       if (this._castAge > 2.25) this._materialGroup.visible = false;
 
-      this._glassMat.roughness = 0.055 + (1 - cool) * 0.055;
+      this._glassMat.roughness = 0.03 + (1 - cool) * 0.065;
       if (this._castAge >= 5.2) {
         this.mode = 'sealed';
         this._materialGroup.visible = false;

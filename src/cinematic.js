@@ -205,10 +205,10 @@ export class CinematicDirector {
   _setLightTargets(sceneMode, dt, scale = 1) {
     const k = dt >= 1 ? 1 : damp(4.8, dt);
     const targets = sceneMode === 'idle'
-      ? { ambient: 0.16, key: 0.48, rim: 1.55, fill: 0.18, stage: 0.8, casting: 0, exposure: 0.98, bloom: 0.08 }
+      ? { ambient: 0.62, key: 1.35, rim: 2.25, fill: 0.72, stage: 1.25, casting: 0, exposure: 0.98, bloom: 0.025 }
       : sceneMode === 'live'
-        ? { ambient: 0.21, key: 0.92, rim: 1.9, fill: 0.34, stage: 1.2, casting: 0.65, exposure: 1.02, bloom: 0.1 }
-        : { ambient: 0.27, key: 1.2, rim: 2.1, fill: 0.52, stage: 1.05, casting: 0, exposure: 1.06, bloom: 0.12 };
+        ? { ambient: 0.68, key: 1.62, rim: 2.48, fill: 0.9, stage: 1.5, casting: 0.55, exposure: 1.0, bloom: 0.03 }
+        : { ambient: 0.72, key: 1.82, rim: 2.72, fill: 1.08, stage: 1.38, casting: 0, exposure: 1.02, bloom: 0.035 };
 
     for (const name of ['ambient', 'key', 'rim', 'fill', 'stage', 'casting']) {
       const target = targets[name] * scale;

@@ -4,7 +4,7 @@ import { Trophy } from '../src/trophy.js';
 import { seedSessions } from '../src/seed-data.js';
 
 function snapshot(trophy) {
-  return trophy.materials.map((item) => [
+  const materials = trophy.materials.map((item) => [
     item.emotion,
     item.target.x,
     item.target.y,
@@ -14,13 +14,22 @@ function snapshot(trophy) {
     item.flow.z,
     item.size,
   ]);
+  const data = trophy._fieldTexture.image.data;
+  let fieldHash = 2166136261;
+  for (let i = 0; i < data.length; i += 17) {
+    fieldHash ^= data[i];
+    fieldHash = Math.imul(fieldHash, 16777619) >>> 0;
+  }
+  return { materials, fieldHash };
 }
 
 function identical(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].length !== b[i].length) return false;
-    for (let j = 0; j < a[i].length; j++) if (a[i][j] !== b[i][j]) return false;
+  if (a.fieldHash !== b.fieldHash || a.materials.length !== b.materials.length) return false;
+  for (let i = 0; i < a.materials.length; i++) {
+    if (a.materials[i].length !== b.materials[i].length) return false;
+    for (let j = 0; j < a.materials[i].length; j++) {
+      if (a.materials[i][j] !== b.materials[i][j]) return false;
+    }
   }
   return true;
 }
@@ -75,7 +84,7 @@ let failed = false;
   const a = new Trophy(999);
   a.beginLive();
   for (let i = 0; i < 257; i++) a.insertSphere(i % 3);
-  const rows = snapshot(a);
+  const rows = snapshot(a).materials;
   let ok = rows.length === a.capacity;
   for (const row of rows) {
     for (const value of row) if (!Number.isFinite(value)) ok = false;

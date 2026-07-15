@@ -73,12 +73,12 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-// Emotion Foundry — 색은 오브젝트에서만 나오고 공간은 거의 무채색으로 유지한다.
-renderer.setClearColor(0x050609, 1);
+// Museum studio — a lifted neutral background gives thick glass something to refract.
+renderer.setClearColor(0x151817, 1);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x050609);
-scene.fog = new THREE.FogExp2(0x050609, 0.018);
+scene.background = new THREE.Color(0x151817);
+scene.fog = new THREE.FogExp2(0x151817, 0.011);
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 2.3, 8.4);
@@ -93,33 +93,33 @@ controls.autoRotate = false;
 controls.target.set(0, 2.05, 0);
 
 // 검은 주조실 — 아이보리 키와 코발트 림이 유리의 두께만 드러낸다.
-const ambient = new THREE.HemisphereLight(0xc7d0e8, 0x020306, 0.11);
+const ambient = new THREE.HemisphereLight(0xe5ece7, 0x111412, 0.28);
 scene.add(ambient);
 
-const key = new THREE.DirectionalLight(0xf5f0df, 0.24);
+const key = new THREE.DirectionalLight(0xfff8e8, 0.8);
 key.position.set(4.8, 8.5, 6.2);
 key.castShadow = true;
 key.shadow.mapSize.set(1024, 1024);
 key.target.position.set(0, 2, 0);
 
-const rim = new THREE.DirectionalLight(0x6d86ff, 1.8);
+const rim = new THREE.DirectionalLight(0xa9c4ff, 1.65);
 rim.position.set(-5.5, 6.5, -6.5);
 rim.target.position.set(0, 2.2, 0);
 
-const fill = new THREE.PointLight(0xe6e1d4, 0.08, 18, 2);
+const fill = new THREE.PointLight(0xeaf2ed, 0.42, 18, 2);
 fill.position.set(4.2, 2.5, 4.4);
 
-const stage = new THREE.SpotLight(0xf3eddd, 0.75, 18, 0.3, 0.92, 1.5);
+const stage = new THREE.SpotLight(0xfff7e8, 1.1, 18, 0.32, 0.92, 1.5);
 stage.position.set(0, 7.5, 3.5);
 stage.target.position.set(0, 0.15, 0);
 
 const casting = new THREE.PointLight(0xff9d35, 0, 4.6, 2);
 const impactLight = new THREE.PointLight(0xffffff, 0, 2.8, 2);
 const sweepLight = new THREE.PointLight(0xffe5ba, 0, 8.5, 1.6);
-const glassKey = new THREE.RectAreaLight(0x8ba0ff, 2.4, 2.2, 5.8);
+const glassKey = new THREE.RectAreaLight(0xc4d5ff, 4.8, 2.2, 5.8);
 glassKey.position.set(-3.7, 3.1, -2.6);
 glassKey.lookAt(0, 2.2, 0);
-const glassEdge = new THREE.RectAreaLight(0xf5f0df, 1.5, 1.4, 4.8);
+const glassEdge = new THREE.RectAreaLight(0xfff7e4, 3.4, 1.4, 4.8);
 glassEdge.position.set(3.8, 2.8, 1.4);
 glassEdge.lookAt(0, 2.1, 0);
 scene.add(
@@ -139,13 +139,20 @@ scene.add(
 
 // 무광 주조실 바닥. 경기장 언어는 영상에만 남기고 무대는 하나의 재료 체계로 통일한다.
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(12, 96),
-  new THREE.MeshBasicMaterial({ color: 0x050609 })
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0x171a19, roughness: 0.72, metalness: 0.04 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.035;
 floor.receiveShadow = true;
 scene.add(floor);
+
+const studioBackdrop = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 20),
+  new THREE.MeshBasicMaterial({ color: 0x222725 })
+);
+studioBackdrop.position.set(0, 8, -6);
+scene.add(studioBackdrop);
 
 const stageRing = new THREE.Mesh(
   new THREE.TorusGeometry(2.05, 0.012, 8, 128),
@@ -158,7 +165,6 @@ const stageRing = new THREE.Mesh(
 );
 stageRing.rotation.x = Math.PI / 2;
 stageRing.position.y = 0.008;
-scene.add(stageRing);
 
 const atmosphere = new FoundryAtmosphere({ density: viewport.compact ? 0.62 : 1 });
 // The atmosphere system remains available for future environments, but this
@@ -333,6 +339,7 @@ function startMatch() {
   // 결산용 라이브 카운터 — 탭 횟수와 홀드 누적 시간
   session.stats = { yesTaps: 0, noTaps: 0, holdMs: 0 };
   session.materials = [];
+  session.nextMaterialSequence = 0;
   if (sculpture) {
     scene.remove(sculpture.group);
     sculpture.dispose();
@@ -344,8 +351,12 @@ function startMatch() {
 
   input = new InputController({
     onVisualPulse: (emo, detail) => {
+      const materialDetail = {
+        ...(detail || {}),
+        sequence: session.nextMaterialSequence++,
+      };
       flashButton(emo);
-      launchGlassBead(emo, detail);
+      launchGlassBead(emo, materialDetail);
       if (emo === 0) session.stats.yesTaps++;
       if (emo === 1) session.stats.noTaps++;
     },
@@ -482,6 +493,7 @@ function placeGlassBead(emo, detail, soundVoice) {
         emotion: emo,
         atMs: Math.round(elapsed),
         holdStep: detail.holdStep || 0,
+        sequence: detail.sequence,
       });
       sculpture.impact(emo);
       cinematic.impact(emo, sculpture.castFrontY());

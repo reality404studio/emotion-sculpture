@@ -41,7 +41,7 @@ function canonicalBeats(session) {
     return `${b.t}|${e[0]},${e[1]},${e[2]}|${b.kind}`;
   });
   const materials = (session.materials || []).map((item) =>
-    `${item.emotion}|${Math.round(item.atMs || 0)}|${item.holdStep || 0}`
+    `${item.emotion}|${Math.round(item.atMs || 0)}|${item.holdStep || 0}|${item.sequence ?? 0}`
   );
   return `${session.id}\n${session.matchLabel}\n${rows.join('\n')}\nmaterials\n${materials.join('\n')}`;
 }

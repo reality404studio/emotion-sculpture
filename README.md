@@ -7,8 +7,9 @@
 While you watch a 3-minute highlight, every reaction becomes a coloured glass
 bead and drops into an open trophy mould. The beads never disappear or turn
 into decorative particles. Cast at any moment (or let the full mould trigger it):
-the same beads soften from the bottom upward, overlap into coloured glass veins,
-and cool inside one calm cast-glass trophy. The result can be committed to
+the bead geometry disappears while its colour, quantity, order, and placement
+are advected into internal glass ribbons. Those ribbons cool inside one calm,
+fixed cast-glass trophy. The result can be committed to
 **Solana devnet** as a deterministic hash — proof that *this* feeling was
 recorded at *this* moment.
 
@@ -64,9 +65,9 @@ preserved material record—not bloom, particles, or generated complexity.
 
 ### The 15-second money shot (sound off, concept still reads)
 Gold **좋아!**, red **안돼!**, and blue **제발!** glass beads visibly drop into
-the mould and accumulate → **Cast the glass** → heat moves upward through those
-same beads → their round forms soften into connected internal colour veins →
-the glass clears and cools → the camera pulls back on one preserved trophy →
+the mould and accumulate → **Cast the glass** → heat removes every spherical
+boundary → only their colours stretch into internal ribbons and clear gaps →
+one fixed glass surface sharpens and cools → the camera pulls back on the trophy →
 **Mint** → devnet explorer link.
 
 ---
@@ -76,13 +77,15 @@ the glass clears and cools → the camera pulls back on one preserved trophy →
 **Stack:** Vite + vanilla JS + three.js (`MeshPhysicalMaterial`,
 `LatheGeometry`, `OrbitControls`), `@solana/web3.js` on devnet.
 
-**The trophy (`src/trophy.js`)** — The trophy accumulates up to 48 real glass
-bead meshes inside an open, physically shaded mould. Each bead has a stable
-packing position derived from its insertion order. Casting computes a second,
-still deterministic position inside the final glass volume, then animates each
-bead from a sphere into a short overlapping inclusion while the clear outer body
-thickens and cools. The colour volume is never uniformly averaged: order is read
-bottom-to-top, and the dominant emotion remains the dominant internal material.
+**The trophy (`src/trophy.js`)** — The trophy accumulates up to 48 temporary
+glass-bead meshes inside an open, physically shaded mould. Each bead is exactly
+one quarter of the former radius. At cast time the beads become colour seeds,
+then a deterministic CPU pass stretches and curls them into a 3D ribbon field
+stored in a texture atlas. A fixed `LatheGeometry` trophy shader ray-marches that
+field beneath one continuous `MeshPhysicalMaterial` surface. The collection
+meshes fade to zero and are hidden completely; no sphere-derived geometry exists
+in the finished object. Clear gaps, bottom-to-top chronology, and relative colour
+quantity remain readable without averaging the material into one flat colour.
 
 **Deterministic reproduction (`src/noise.js`, `src/session.js`)** — The whole
 "commit a hash on-chain to prove authenticity" claim only holds if the sculpture

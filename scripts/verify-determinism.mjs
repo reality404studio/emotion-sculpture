@@ -79,7 +79,28 @@ let failed = false;
   if (!okSeed || !okBeats) failed = true;
 }
 
-// 4. Heavy input remains finite and stops exactly at the physical mould capacity.
+// 4. The cast compresses clicks into one primary, one secondary, and one accent
+// flow while preserving a majority of optically clear volume.
+{
+  const a = new Trophy(424242);
+  const sequence = [2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 1];
+  a.beginLive();
+  sequence.forEach((emotion, index) => a.insertSphere(emotion, { sequence: index }));
+  a.finishCast();
+  const roles = a._fieldComposition.roles;
+  const ok =
+    a._fieldSeeds.length === 3 &&
+    roles.map((item) => item.role).join(',') === 'primary,secondary,accent' &&
+    roles[0].emotion === 2 &&
+    roles[0].width > roles[1].width &&
+    roles[1].width > roles[2].width &&
+    a._fieldCoverage > 0.025 &&
+    a._fieldCoverage < 0.24;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  cast hierarchy preserves clear glass (${Math.round(a._fieldCoverage * 100)}% colour volume)`);
+  if (!ok) failed = true;
+}
+
+// 5. Heavy input remains finite and stops exactly at the physical mould capacity.
 {
   const a = new Trophy(999);
   a.beginLive();

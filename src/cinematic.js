@@ -96,19 +96,18 @@ export class CinematicDirector {
     this.mode = 'result';
     this.age = 0;
     const portrait = this.viewport.portrait;
-    const angle = portrait ? 0.16 : 0.3;
-    const distance = portrait ? 9.8 : 8.15;
-    this.goalTarget.set(0, portrait ? 1.68 : this.totalHeight * 0.49, 0);
-    this.goalPos.set(Math.sin(angle) * distance, portrait ? 2.25 : this.totalHeight * 0.58, Math.cos(angle) * distance);
+    const angle = portrait ? 0.28 : 0.48;
+    const distance = portrait ? 9.65 : 8.35;
+    this.goalTarget.set(0, portrait ? 1.78 : this.totalHeight * 0.47, 0);
+    this.goalPos.set(Math.sin(angle) * distance, portrait ? 2.62 : 2.7, Math.cos(angle) * distance);
     if (instant) {
       this.camera.position.copy(this.goalPos);
       this.controls.target.copy(this.goalTarget);
-      this.camera.fov = portrait ? 42 : 37;
+      this.camera.fov = portrait ? 41.5 : 37;
       this.camera.updateProjectionMatrix();
     }
     this.controls.enabled = true;
-    this.controls.autoRotate = true;
-    this.controls.autoRotateSpeed = portrait ? 0.34 : 0.55;
+    this.controls.autoRotate = false;
     this._setLightTargets('result', 1);
   }
 
@@ -170,13 +169,13 @@ export class CinematicDirector {
   _updateReveal(dt) {
     const t = ease(this.age / 5.05);
     const portrait = this.viewport.portrait;
-    const angle = portrait ? 0.16 : 0.3;
-    const distance = portrait ? 9.8 : 8.15;
-    this.heroTarget.set(0, portrait ? 1.68 : this.totalHeight * 0.49, 0);
-    this.heroPos.set(Math.sin(angle) * distance, portrait ? 2.25 : this.totalHeight * 0.58, Math.cos(angle) * distance);
+    const angle = portrait ? 0.28 : 0.48;
+    const distance = portrait ? 9.65 : 8.35;
+    this.heroTarget.set(0, portrait ? 1.78 : this.totalHeight * 0.47, 0);
+    this.heroPos.set(Math.sin(angle) * distance, portrait ? 2.62 : 2.7, Math.cos(angle) * distance);
     this.goalPos.lerpVectors(this.revealFromPos, this.heroPos, t);
     this.goalTarget.lerpVectors(this.revealFromTarget, this.heroTarget, t);
-    this._moveCamera(dt, portrait ? 42 : 37, 2.2);
+    this._moveCamera(dt, portrait ? 41.5 : 37, 2.2);
 
     // The warm working light rises with the softening front, then fades as the glass cools.
     const heatT = clamp01((this.age - 0.35) / 3.2);

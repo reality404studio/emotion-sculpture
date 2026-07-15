@@ -16,11 +16,11 @@ const R_UNIT = 1.05;
 const CAPACITY = 48;
 const BEAD_RADIUS = 0.245 * 0.25; // requested: exactly 1/4 of the previous bead radius
 
-const FIELD_X = 48;
-const FIELD_Y = 96;
-const FIELD_Z = 48;
+const FIELD_X = 64;
+const FIELD_Y = 128;
+const FIELD_Z = 64;
 const FIELD_COLS = 8;
-const FIELD_ROWS = 6;
+const FIELD_ROWS = 8;
 const FIELD_W = FIELD_X * FIELD_COLS;
 const FIELD_H = FIELD_Y * FIELD_ROWS;
 const FIELD_BOUND = 1.22;
@@ -81,13 +81,49 @@ function trophyRadiusAt(normalizedY) {
   return upperProfileAt((y - 0.18) / 0.82) * R_UNIT;
 }
 
-function makeTrophyGeometry(radialScale = 1) {
+function makeTrophyGeometry(radialScale = 1, seed = 0) {
   const points = BASE_PROFILE.map(([u, r]) => new THREE.Vector2(r * R_UNIT * radialScale, u * TOTAL_H));
   for (let i = 1; i <= 88; i++) {
     const u = i / 88;
     points.push(new THREE.Vector2(upperProfileAt(u) * R_UNIT * radialScale, BASE_H + u * GLASS_H));
   }
   const geometry = new THREE.LatheGeometry(points, 112);
+  const position = geometry.attributes.position;
+  const phase = rnd(seed, 0, 91) * Math.PI * 2;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const u = clamp01(y / TOTAL_H);
+    const angle = Math.atan2(z, x);
+    const bowl = smooth((u - 0.18) / 0.28);
+    const rim = smooth((u - 0.84) / 0.16);
+    const radialVariation =
+      1 +
+      Math.sin(angle + phase) * 0.0048 * bowl +
+      Math.sin(angle * 2 + y * 0.82 + phase * 0.63) * 0.0026;
+    position.setXYZ(
+      i,
+      x * radialVariation,
+      y + rim * (Math.sin(angle + phase) * 0.008 + Math.sin(angle * 3 - phase) * 0.0025),
+      z * radialVariation
+    );
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function makeRimGeometry(seed) {
+  const geometry = new THREE.TorusGeometry(upperProfileAt(1) * R_UNIT, 0.034, 18, 128);
+  const position = geometry.attributes.position;
+  const phase = rnd(seed, 0, 92) * Math.PI * 2;
+  for (let i = 0; i < position.count; i++) {
+    const x = position.getX(i);
+    const y = position.getY(i);
+    const z = position.getZ(i);
+    const angle = Math.atan2(y, x);
+    position.setZ(i, z + Math.sin(angle + phase) * 0.008 + Math.sin(angle * 3 - phase) * 0.002);
+  }
   geometry.computeVertexNormals();
   return geometry;
 }
@@ -102,8 +138,8 @@ function makePhysicalGlass(color, options = {}) {
     ior: 1.48,
     clearcoat: 1,
     clearcoatRoughness: 0.035,
-    attenuationDistance: 4.8,
-    attenuationColor: new THREE.Color(0xe8f1ee),
+    attenuationDistance: 9.5,
+    attenuationColor: new THREE.Color(0xf3f8f6),
     envMapIntensity: options.envMapIntensity ?? 1.45,
     specularIntensity: 1,
     specularColor: new THREE.Color(0xffffff),
@@ -175,13 +211,13 @@ export class Trophy {
 
   _buildBody() {
     this._bodyGroup = new THREE.Group();
-    this._bodyGeom = makeTrophyGeometry();
-    this._glassMat = makePhysicalGlass(0xdce5e1, {
-      opacity: 0.34,
-      transmission: 0.96,
-      roughness: 0.1,
-      thickness: 3.1,
-      envMapIntensity: 1.65,
+    this._bodyGeom = makeTrophyGeometry(1, this.seed);
+    this._glassMat = makePhysicalGlass(0xf2f8f6, {
+      opacity: 0.26,
+      transmission: 0.975,
+      roughness: 0.075,
+      thickness: 2.85,
+      envMapIntensity: 1.85,
     });
 
     this._glassMat.onBeforeCompile = (shader) => {
@@ -231,24 +267,27 @@ export class Trophy {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-        vec4 glassVolume = vec4(0.0);
+        vec3 glassColorSum = vec3(0.0);
+        float glassColorWeight = 0.0;
+        float glassIntegratedDensity = 0.0;
         vec3 glassMarch = vGlassLocalPosition + vGlassRayDirection * 0.035;
-        for (int glassStep = 0; glassStep < 12; glassStep++) {
-          glassMarch += vGlassRayDirection * 0.205;
+        for (int glassStep = 0; glassStep < 24; glassStep++) {
+          glassMarch += vGlassRayDirection * 0.1083;
           vec4 glassSample = sampleGlassVolume(glassMarch);
-          float sampleAlpha = glassSample.a * 0.55 * uGlassFieldReveal;
-          float remain = 1.0 - glassVolume.a;
-          glassVolume.rgb += glassSample.rgb * sampleAlpha * remain;
-          glassVolume.a += sampleAlpha * remain;
+          float sampleDensity = glassSample.a * uGlassFieldReveal;
+          float sampleWeight = sampleDensity * (0.65 + sampleDensity * 0.35);
+          glassColorSum += glassSample.rgb * sampleWeight;
+          glassColorWeight += sampleWeight;
+          glassIntegratedDensity += sampleDensity;
         }
-        vec3 internalGlassColor = glassVolume.rgb / max(glassVolume.a, 0.001);
-        internalGlassColor = min(vec3(1.0), pow(internalGlassColor, vec3(0.74)) * 1.24);
-        float internalGlassAmount = smoothstep(0.008, 0.3, glassVolume.a);
-        diffuseColor.rgb = mix(diffuseColor.rgb, internalGlassColor, internalGlassAmount * 0.98);`
+        vec3 internalGlassColor = glassColorSum / max(glassColorWeight, 0.001);
+        internalGlassColor = min(vec3(1.0), pow(internalGlassColor, vec3(0.92)) * 1.08);
+        float internalGlassAmount = smoothstep(0.04, 0.85, glassIntegratedDensity);
+        diffuseColor.rgb = mix(diffuseColor.rgb, internalGlassColor, internalGlassAmount * 0.88);`
       );
       this._shader = shader;
     };
-    this._glassMat.customProgramCacheKey = () => 'emotion-art-glass-volume-v1';
+    this._glassMat.customProgramCacheKey = () => 'emotion-art-glass-volume-v2';
 
     this._body = new THREE.Mesh(this._bodyGeom, this._glassMat);
     this._body.castShadow = true;
@@ -272,7 +311,7 @@ export class Trophy {
       envMapIntensity: 1.8,
     });
     this._rim = new THREE.Mesh(
-      new THREE.TorusGeometry(upperProfileAt(1) * R_UNIT, 0.032, 16, 128),
+      makeRimGeometry(this.seed),
       this._rimMat
     );
     this._rim.rotation.x = Math.PI / 2;
@@ -417,29 +456,143 @@ export class Trophy {
     const chronological = [...this.materials].sort((a, b) =>
       (a.detail.sequence ?? a.index) - (b.detail.sequence ?? b.index)
     );
-    const chronology = new Map(chronological.map((item, index) => [item, index]));
-    this._fieldSeeds = this.materials.map((item) => {
-      const order = chronology.get(item) / span;
-      const normalizedY = 0.23 + order * 0.68;
-      const radius = trophyRadiusAt(normalizedY) * (0.16 + rnd(this.seed, item.index, 22) * 0.4);
-      const angle = Math.atan2(item.target.z, item.target.x) + (rnd(this.seed, item.index, 23) - 0.5) * 0.7;
-      const color = new THREE.Color(COLORS[item.emotion]);
-      const seed = {
-        color,
-        x: Math.cos(angle) * radius,
-        y: normalizedY * TOTAL_H,
-        z: Math.sin(angle) * radius,
-        width: 0.16 + rnd(this.seed, item.index, 24) * 0.12,
-        thin: 0.035 + rnd(this.seed, item.index, 25) * 0.03,
-        stretch: 0.42 + rnd(this.seed, item.index, 26) * 0.28 + item.emotion * 0.055,
-        curl: 0.045 + rnd(this.seed, item.index, 27) * 0.095,
-        phase: rnd(this.seed, item.index, 28) * Math.PI * 2,
-        angle: angle + (rnd(this.seed, item.index, 29) - 0.5) * 1.2,
-        weight: 0.75 + rnd(this.seed, item.index, 30) * 0.55,
-      };
-      item.flow.set(seed.x, seed.y, seed.z);
-      return seed;
+    const stats = [0, 1, 2].map(() => ({ count: 0, first: Infinity, last: -Infinity, orderSum: 0 }));
+    chronological.forEach((item, orderIndex) => {
+      const stat = stats[item.emotion];
+      stat.count++;
+      stat.first = Math.min(stat.first, orderIndex);
+      stat.last = Math.max(stat.last, orderIndex);
+      stat.orderSum += orderIndex;
     });
+
+    const ranked = [0, 1, 2]
+      .filter((emotion) => stats[emotion].count > 0)
+      .sort((a, b) =>
+        stats[b].count - stats[a].count ||
+        stats[a].first - stats[b].first ||
+        a - b
+      );
+
+    if (ranked.length === 0) {
+      this._fieldSeeds = [];
+      this._fieldComposition = { counts: [0, 0, 0], ranked: [], roles: [] };
+      return;
+    }
+
+    const primaryEmotion = ranked[0];
+    const secondaryEmotion = ranked[1] ?? primaryEmotion;
+    const accentEmotion = ranked[2] ?? secondaryEmotion;
+    const primarySide = rnd(this.seed, primaryEmotion, 106) > 0.5 ? 1 : -1;
+    const heroAngle = 0.48;
+    const screenRightX = Math.cos(heroAngle);
+    const screenRightZ = -Math.sin(heroAngle);
+    const viewX = Math.sin(heroAngle);
+    const viewZ = Math.cos(heroAngle);
+    const rolePlan = [
+      { role: 'primary', emotion: primaryEmotion },
+      { role: 'secondary', emotion: secondaryEmotion },
+      { role: 'accent', emotion: accentEmotion },
+    ];
+
+    const makeComposedSeed = ({ role, emotion }, ordinal) => {
+      const stat = stats[emotion];
+      const ratio = stat.count / Math.max(1, count);
+      const averageOrder = (stat.orderSum / Math.max(1, stat.count)) / span;
+      const orderSpread = Math.max(0, stat.last - stat.first) / span;
+      const salt = 112 + ordinal * 19 + emotion * 7;
+
+      let normalizedY;
+      let radialFactor;
+      if (role === 'primary') {
+        normalizedY = clamp01(0.5 + (averageOrder - 0.5) * 0.34);
+        radialFactor = 0.29 + rnd(this.seed, emotion, salt) * 0.12;
+      } else if (role === 'secondary') {
+        normalizedY = clamp01(0.35 + averageOrder * 0.35);
+        radialFactor = 0.38 + rnd(this.seed, emotion, salt + 2) * 0.14;
+      } else {
+        normalizedY = clamp01(0.24 + averageOrder * 0.63);
+        radialFactor = 0.42 + rnd(this.seed, emotion, salt + 4) * 0.16;
+      }
+
+      const radius = trophyRadiusAt(normalizedY) * radialFactor;
+      const isPrimary = role === 'primary';
+      const isSecondary = role === 'secondary';
+      const screenOffset = isPrimary
+        ? primarySide * radius * 0.55
+        : isSecondary
+          ? -primarySide * radius * 0.76
+          : primarySide * radius * 0.88;
+      const depthOffset = isPrimary
+        ? radius * 0.34
+        : isSecondary
+          ? -radius * 0.18
+          : radius * 0.08;
+      return {
+        role,
+        emotion,
+        color: new THREE.Color(COLORS[emotion]),
+        x: screenRightX * screenOffset + viewX * depthOffset,
+        y: normalizedY * TOTAL_H,
+        z: screenRightZ * screenOffset + viewZ * depthOffset,
+        width: isPrimary
+          ? 0.18 + ratio * 0.08
+          : isSecondary
+            ? 0.11 + ratio * 0.055
+            : 0.04 + ratio * 0.04,
+        thin: isPrimary
+          ? 0.075 + ratio * 0.04
+          : isSecondary
+            ? 0.05 + ratio * 0.025
+            : 0.024 + ratio * 0.016,
+        stretch: isPrimary
+          ? 1.18 + orderSpread * 0.52
+          : isSecondary
+            ? 0.88 + orderSpread * 0.34
+            : 0.34 + orderSpread * 0.3,
+        curl: isPrimary
+          ? 0.17 + rnd(this.seed, emotion, salt + 5) * 0.08
+          : isSecondary
+            ? 0.09 + rnd(this.seed, emotion, salt + 5) * 0.07
+            : 0.035 + rnd(this.seed, emotion, salt + 5) * 0.045,
+        fold: isPrimary
+          ? 0.12 + rnd(this.seed, emotion, salt + 6) * 0.08
+          : 0.035 + rnd(this.seed, emotion, salt + 6) * 0.055,
+        driftX: primarySide * (isPrimary ? 0.32 + rnd(this.seed, emotion, salt + 7) * 0.18 : -0.08),
+        driftZ: (rnd(this.seed, emotion, salt + 8) - 0.5) * (isPrimary ? 0.28 : 0.2),
+        widthPulse: isPrimary ? 0.28 : isSecondary ? 0.2 : 0.12,
+        taper: isPrimary ? 0.52 : isSecondary ? 0.64 : 0.78,
+        softness: isPrimary ? 1.18 : isSecondary ? 1.3 : 1.55,
+        phase: rnd(this.seed, emotion, salt + 9) * Math.PI * 2,
+        angle: isPrimary
+          ? (rnd(this.seed, emotion, salt + 10) - 0.5) * 0.5
+          : isSecondary
+            ? 0.55 + (rnd(this.seed, emotion, salt + 10) - 0.5) * 0.7
+            : -0.6 + (rnd(this.seed, emotion, salt + 10) - 0.5) * 1.2,
+        weight: isPrimary
+          ? 1.55 + ratio * 1.15
+          : isSecondary
+            ? 1.05 + ratio * 0.75
+            : 1.7 + ratio * 0.9,
+      };
+    };
+
+    this._fieldSeeds = rolePlan.map(makeComposedSeed);
+    this._fieldComposition = {
+      counts: stats.map((stat) => stat.count),
+      ranked,
+      roles: this._fieldSeeds.map(({ role, emotion, width, stretch, weight }) => ({
+        role,
+        emotion,
+        width,
+        stretch,
+        weight,
+      })),
+    };
+
+    for (const item of this.materials) {
+      const seed = this._fieldSeeds.find((candidate) => candidate.emotion === item.emotion) ?? this._fieldSeeds[0];
+      item.flow.set(seed.x, seed.y, seed.z);
+    }
   }
 
   _generateColorField() {
@@ -450,6 +603,8 @@ export class Trophy {
       return;
     }
 
+    let insideCount = 0;
+    let filledCount = 0;
     for (let iz = 0; iz < FIELD_Z; iz++) {
       const z = -FIELD_BOUND + ((iz + 0.5) / FIELD_Z) * FIELD_BOUND * 2;
       const atlasX = (iz % FIELD_COLS) * FIELD_X;
@@ -461,6 +616,7 @@ export class Trophy {
         for (let ix = 0; ix < FIELD_X; ix++) {
           const x = -FIELD_BOUND + ((ix + 0.5) / FIELD_X) * FIELD_BOUND * 2;
           if (Math.hypot(x, z) > maxRadius) continue;
+          insideCount++;
 
           let densitySum = 0;
           let red = 0;
@@ -468,29 +624,48 @@ export class Trophy {
           let blue = 0;
           for (const seed of seeds) {
             const dy = y - seed.y;
-            if (Math.abs(dy) > seed.stretch * 2.4) continue;
-            const bendX = seed.x + Math.sin(dy * 1.45 + seed.phase) * seed.curl + dy * 0.035 * Math.cos(seed.phase);
-            const bendZ = seed.z + Math.cos(dy * 1.2 + seed.phase) * seed.curl + dy * 0.03 * Math.sin(seed.phase);
+            if (Math.abs(dy) > seed.stretch * 1.65) continue;
+            const t = dy / Math.max(0.001, seed.stretch);
+            const foldEnvelope = Math.max(0.25, 1 - Math.abs(t) * 0.42);
+            const bendX =
+              seed.x +
+              t * seed.driftX +
+              Math.sin(t * Math.PI * 1.18 + seed.phase) * seed.curl +
+              Math.sin(t * 2.45 - seed.phase * 0.45) * seed.fold * foldEnvelope;
+            const bendZ =
+              seed.z +
+              t * seed.driftZ +
+              Math.cos(t * Math.PI * 0.92 + seed.phase) * seed.curl * 0.76 +
+              Math.cos(t * 2.1 + seed.phase * 0.62) * seed.fold * foldEnvelope;
             const dx = x - bendX;
             const dz = z - bendZ;
             const c = Math.cos(seed.angle);
             const s = Math.sin(seed.angle);
             const broad = dx * c + dz * s;
             const narrow = -dx * s + dz * c;
+            const width = Math.max(
+              0.025,
+              seed.width *
+                (1 + Math.sin(t * 2.8 + seed.phase) * seed.widthPulse) *
+                (1 - Math.min(0.82, Math.abs(t) * seed.taper * 0.38))
+            );
+            const thin = Math.max(0.009, seed.thin * (0.82 + 0.18 * Math.cos(t * 3.6 - seed.phase)));
             const shape =
-              (broad * broad) / (seed.width * seed.width) +
-              (narrow * narrow) / (seed.thin * seed.thin) +
-              (dy * dy) / (seed.stretch * seed.stretch);
-            const density = Math.exp(-shape * 0.72) * seed.weight;
-            if (density < 0.015) continue;
+              (broad * broad) / (width * width) +
+              (narrow * narrow) / (thin * thin) +
+              t * t * 1.08;
+            const density = Math.exp(-shape * seed.softness) * seed.weight;
+            if (density < 0.022) continue;
             densitySum += density;
             red += seed.color.r * density;
             green += seed.color.g * density;
             blue += seed.color.b * density;
           }
 
-          if (densitySum < 0.025) continue; // preserve clear glass between currents
-          const alpha = clamp01(1 - Math.exp(-densitySum * 0.72));
+          if (densitySum < 0.058) continue; // most of the object remains genuinely clear
+          const alpha = smooth((1 - Math.exp(-densitySum * 0.86) - 0.055) / 0.82);
+          if (alpha <= 0.01) continue;
+          filledCount++;
           const pixelX = atlasX + ix;
           const pixelY = atlasY + iy;
           const offset = (pixelY * FIELD_W + pixelX) * 4;
@@ -501,6 +676,7 @@ export class Trophy {
         }
       }
     }
+    this._fieldCoverage = insideCount > 0 ? filledCount / insideCount : 0;
     this._replaceFieldTexture(data);
   }
 
@@ -529,12 +705,12 @@ export class Trophy {
 
   _setBodyState(progress) {
     const p = smooth(progress);
-    this._glassMat.opacity = 0.34 + p * 0.66;
-    this._glassMat.roughness = 0.1 - p * 0.07;
-    this._glassMat.transmission = 0.96 - p * 0.08;
-    this._glassMat.thickness = 2.45 + p * 0.65;
-    this._rimMat.opacity = 0.58 + p * 0.4;
-    this._rimMat.roughness = 0.06 - p * 0.025;
+    this._glassMat.opacity = 0.26 + p * 0.69;
+    this._glassMat.roughness = 0.075 - p * 0.057;
+    this._glassMat.transmission = 0.975 - p * 0.035;
+    this._glassMat.thickness = 2.3 + p * 0.65;
+    this._rimMat.opacity = 0.54 + p * 0.44;
+    this._rimMat.roughness = 0.06 - p * 0.032;
     this._collarMat.opacity = 0.32 * (1 - p);
   }
 
@@ -579,7 +755,7 @@ export class Trophy {
       }
       if (this._castAge > 2.25) this._materialGroup.visible = false;
 
-      this._glassMat.roughness = 0.03 + (1 - cool) * 0.065;
+      this._glassMat.roughness = 0.018 + (1 - cool) * 0.057;
       if (this._castAge >= 5.2) {
         this.mode = 'sealed';
         this._materialGroup.visible = false;

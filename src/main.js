@@ -152,7 +152,7 @@ scene.add(
 // Warm-white seamless studio floor with a quiet contact shadow.
 const floor = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 40),
-  new THREE.MeshStandardMaterial({ color: 0xe9e7e1, roughness: 0.82, metalness: 0 })
+  new THREE.MeshStandardMaterial({ color: 0xe8e6e0, roughness: 0.86, metalness: 0 })
 );
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.035;
@@ -161,7 +161,30 @@ scene.add(floor);
 
 const studioBackdrop = new THREE.Mesh(
   new THREE.PlaneGeometry(40, 20),
-  new THREE.MeshBasicMaterial({ color: 0xf3f2ee })
+  new THREE.ShaderMaterial({
+    depthWrite: false,
+    vertexShader: `
+      varying vec2 vStudioUv;
+      void main() {
+        vStudioUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vStudioUv;
+      void main() {
+        vec3 shadowSide = vec3(0.835, 0.842, 0.825);
+        vec3 lightSide = vec3(0.965, 0.958, 0.936);
+        float sideGradient = smoothstep(0.12, 0.88, vStudioUv.x);
+        vec3 studio = mix(shadowSide, lightSide, sideGradient);
+        float halo = exp(-dot(vStudioUv - vec2(0.58, 0.48), vStudioUv - vec2(0.58, 0.48)) * 7.5);
+        studio += halo * vec3(0.035, 0.038, 0.038);
+        float vertical = smoothstep(0.08, 0.82, vStudioUv.y);
+        studio *= 0.965 + vertical * 0.035;
+        gl_FragColor = vec4(studio, 1.0);
+      }
+    `,
+  })
 );
 studioBackdrop.position.set(0, 8, -7.5);
 scene.add(studioBackdrop);

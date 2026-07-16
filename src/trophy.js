@@ -226,6 +226,7 @@ export class Trophy {
     this._castAge = 0;
     this._settlePulse = 0;
     this._fieldReveal = 0;
+    this._stadiumOptics = 0;
     this._shader = null;
     this._cameraLocal = new THREE.Vector3();
 
@@ -297,6 +298,7 @@ export class Trophy {
       shader.uniforms.uGlassField = { value: this._fieldTexture };
       shader.uniforms.uGlassFieldReveal = { value: this._fieldReveal };
       shader.uniforms.uGlassCameraLocal = { value: this._cameraLocal };
+      shader.uniforms.uStadiumOptics = { value: this._stadiumOptics };
 
       shader.vertexShader = `
         varying vec3 vGlassLocalPosition;
@@ -313,6 +315,7 @@ export class Trophy {
       shader.fragmentShader = `
         uniform sampler2D uGlassField;
         uniform float uGlassFieldReveal;
+        uniform float uStadiumOptics;
         varying vec3 vGlassLocalPosition;
         varying vec3 vGlassRayDirection;
 
@@ -357,6 +360,23 @@ export class Trophy {
         internalGlassColor = min(vec3(1.0), pow(internalGlassColor, vec3(0.92)) * 1.08);
         float internalGlassAmount = smoothstep(0.18, 2.4, glassIntegratedDensity);
         diffuseColor.rgb = mix(diffuseColor.rgb, internalGlassColor, internalGlassAmount * 0.74);`
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `float stadiumFresnel = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 3.2);
+        float stadiumHeight = clamp(vGlassLocalPosition.y / ${TOTAL_H.toFixed(4)}, 0.0, 1.0);
+        float stadiumUpper = smoothstep(0.54, 0.94, stadiumHeight);
+        float stadiumLower = 1.0 - smoothstep(0.18, 0.42, stadiumHeight);
+        float stadiumWarmEdge = smoothstep(0.35, 0.82, vGlassLocalPosition.x / ${FIELD_BOUND.toFixed(4)})
+          * smoothstep(0.32, 0.54, stadiumHeight)
+          * (1.0 - smoothstep(0.54, 0.76, stadiumHeight));
+        vec3 stadiumReflection =
+          vec3(0.55, 0.72, 1.0) * stadiumUpper * 0.22 +
+          vec3(0.28, 0.55, 0.36) * stadiumLower * 0.09 +
+          vec3(1.0, 0.48, 0.25) * stadiumWarmEdge * 0.055 +
+          vec3(0.72, 0.76, 0.78) * 0.035;
+        outgoingLight += stadiumReflection * stadiumFresnel * uStadiumOptics;
+        #include <opaque_fragment>`
       );
       this._shader = shader;
     };
@@ -793,6 +813,20 @@ export class Trophy {
 
   setLive() {}
   setPixelRatio() {}
+
+  setEnvironmentMap(texture) {
+    const enhanced = Boolean(texture);
+    this._stadiumOptics = enhanced ? 1 : 0;
+    if (this._shader) this._shader.uniforms.uStadiumOptics.value = this._stadiumOptics;
+    const materials = [this._glassMat, this._rimMat, ...this._beadMaterials];
+    for (const material of materials) {
+      material.envMap = texture;
+      material.needsUpdate = true;
+    }
+    this._glassMat.envMapIntensity = enhanced ? 2.45 : 1.85;
+    this._rimMat.envMapIntensity = enhanced ? 2.35 : 1.8;
+    for (const material of this._beadMaterials) material.envMapIntensity = enhanced ? 1.72 : 1.45;
+  }
 
   _setBodyState(progress) {
     const p = smooth(progress);

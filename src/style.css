@@ -286,6 +286,28 @@ button:disabled { cursor: not-allowed; opacity: 0.48; transform: none; }
   white-space: pre;
 }
 
+#stadium-optics-toggle {
+  position: fixed;
+  top: 82px;
+  right: 28px;
+  z-index: 30;
+  min-width: 128px;
+  padding: 9px 12px;
+  color: #34403d;
+  border-color: rgba(42, 54, 51, .18);
+  border-radius: 99px;
+  background: rgba(255, 255, 252, .86);
+  box-shadow: 0 10px 32px rgba(45, 54, 51, .1);
+  font: 750 8px/1 var(--mono);
+  letter-spacing: .1em;
+}
+
+#stadium-optics-toggle[aria-pressed="true"] {
+  color: #425d57;
+  border-color: rgba(78, 118, 108, .34);
+  box-shadow: 0 10px 32px rgba(45, 54, 51, .1), inset 0 0 0 1px rgba(142, 186, 174, .12);
+}
+
 /* 결과는 조형을 가리는 대형 리포트가 아니라 우측 하단의 작은 인증 패널이다. */
 #result { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
 .result-card {

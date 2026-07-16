@@ -22,6 +22,7 @@ import { seedSessions } from './seed-data.js';
 import { CastSound } from './sound.js';
 import { CinematicDirector } from './cinematic.js';
 import { FoundryAtmosphere } from './atmosphere.js';
+import { createHiddenStadiumEnvironment } from './hidden-stadium-environment.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
@@ -81,7 +82,9 @@ scene.background = new THREE.Color(0xf3f2ee);
 scene.fog = new THREE.Fog(0xf3f2ee, 15, 34);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.032).texture;
+const baseEnvironmentTarget = pmrem.fromScene(new RoomEnvironment(), 0.032);
+const hiddenStadiumTarget = createHiddenStadiumEnvironment(renderer);
+scene.environment = baseEnvironmentTarget.texture;
 pmrem.dispose();
 
 const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -254,6 +257,34 @@ let compareTrophies = [];
 let ruler = null; // 결과 화면의 발광 시간 눈금자
 let lastSphereInsertedAt = -Infinity;
 
+let stadiumOpticsEnabled = true;
+const opticalEnvironmentFor = () => stadiumOpticsEnabled ? hiddenStadiumTarget.texture : null;
+const applyOpticalEnvironment = (trophy) => trophy?.setEnvironmentMap(opticalEnvironmentFor());
+
+function setStadiumOptics(enabled) {
+  stadiumOpticsEnabled = enabled;
+  applyOpticalEnvironment(sculpture);
+  compareTrophies.forEach(applyOpticalEnvironment);
+  if (stadiumOpticsToggle) {
+    stadiumOpticsToggle.textContent = `OPTICS: ${enabled ? 'STADIUM' : 'BASE'}`;
+    stadiumOpticsToggle.setAttribute('aria-pressed', String(enabled));
+  }
+}
+
+const stadiumOpticsToggle = import.meta.env.DEV ? document.createElement('button') : null;
+if (stadiumOpticsToggle) {
+  stadiumOpticsToggle.id = 'stadium-optics-toggle';
+  stadiumOpticsToggle.type = 'button';
+  stadiumOpticsToggle.title = 'Toggle hidden stadium reflection environment (H)';
+  stadiumOpticsToggle.addEventListener('click', () => setStadiumOptics(!stadiumOpticsEnabled));
+  document.body.appendChild(stadiumOpticsToggle);
+  setStadiumOptics(true);
+  window.addEventListener('keydown', (event) => {
+    if (event.key.toLowerCase() !== 'h' || event.repeat || event.target instanceof HTMLInputElement) return;
+    setStadiumOptics(!stadiumOpticsEnabled);
+  });
+}
+
 const CAST_TRANSITIONS = Object.freeze({
   COLLECTING: new Set(['MANUAL_CAST_READY', 'AUTO_CAST_READY']),
   MANUAL_CAST_READY: new Set(['AUTO_CAST_READY', 'MELTING']),
@@ -331,6 +362,7 @@ resultPanelToggle.addEventListener('click', () => {
 
 function installDormantTrophy() {
   sculpture = new Trophy(0x454d4f54);
+  applyOpticalEnvironment(sculpture);
   sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
 }
@@ -438,6 +470,7 @@ function startMatch() {
     sculpture.dispose();
   }
   sculpture = new Trophy(sessionSeed(session));
+  applyOpticalEnvironment(sculpture);
   sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
   sculpture.beginLive();
@@ -819,6 +852,7 @@ function buildCompare() {
   const seeds = seedSessions();
   seeds.forEach((s, i) => {
     const sc = new Trophy(1000 + i);
+    applyOpticalEnvironment(sc);
     sc.setPixelRatio(renderPixelRatio());
     sc.setBeats(s.beats);
     // 같은 뼈대, 정반대의 상처 — 라이벌 트로피는 반대편을 보인다 (§6)

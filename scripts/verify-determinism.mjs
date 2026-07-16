@@ -1,6 +1,6 @@
 // Headless determinism checks for the accumulated-glass casting model.
 // Same seed + same material history must reproduce bead placement and flow.
-import { Trophy } from '../src/trophy.js';
+import { Trophy, COLLECTION_CONFIG, COLOR_FIELD_CONFIG } from '../src/trophy.js';
 import { seedSessions } from '../src/seed-data.js';
 
 function snapshot(trophy) {
@@ -79,8 +79,8 @@ let failed = false;
   if (!okSeed || !okBeats) failed = true;
 }
 
-// 4. The cast compresses clicks into one primary, one secondary, and one accent
-// flow while preserving a majority of optically clear volume.
+// 4. Casting splits the immutable bead snapshot into several bounded flows and
+// keeps the specified amount of genuinely clear glass.
 {
   const a = new Trophy(424242);
   const sequence = [2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 1];
@@ -89,14 +89,14 @@ let failed = false;
   a.finishCast();
   const roles = a._fieldComposition.roles;
   const ok =
-    a._fieldSeeds.length === 3 &&
-    roles.map((item) => item.role).join(',') === 'primary,secondary,accent' &&
-    roles[0].emotion === 2 &&
-    roles[0].width > roles[1].width &&
-    roles[1].width > roles[2].width &&
-    a._fieldCoverage > 0.025 &&
-    a._fieldCoverage < 0.24;
-  console.log(`${ok ? 'PASS' : 'FAIL'}  cast hierarchy preserves clear glass (${Math.round(a._fieldCoverage * 100)}% colour volume)`);
+    a._fieldSeeds.length >= COLOR_FIELD_CONFIG.minFlowCount &&
+    a._fieldSeeds.length <= COLOR_FIELD_CONFIG.maxFlowCount &&
+    roles.filter((item) => item.role === 'major').length >= COLOR_FIELD_CONFIG.minMajorFlows &&
+    a._largestFlowContribution <= COLOR_FIELD_CONFIG.maxSingleFlowContribution &&
+    a._clearGlassFraction >= COLOR_FIELD_CONFIG.minClearGlassFraction &&
+    a._clearGlassFraction <= COLOR_FIELD_CONFIG.maxClearGlassFraction &&
+    a._fieldValidation.valid;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  anti-snake field uses ${a._fieldSeeds.length} flows (${Math.round(a._clearGlassFraction * 100)}% clear glass)`);
   if (!ok) failed = true;
 }
 
@@ -111,6 +111,23 @@ let failed = false;
     for (const value of row) if (!Number.isFinite(value)) ok = false;
   }
   console.log(`${ok ? 'PASS' : 'FAIL'}  full mould stops safely at ${a.materials.length}/${a.capacity} beads`);
+  if (!ok) failed = true;
+}
+
+// 6. Visible bead tops, not elapsed time or shader density, unlock auto-cast.
+{
+  const a = new Trophy(3030);
+  a.beginLive();
+  for (let i = 0; i < COLLECTION_CONFIG.autoCastMinCount - 1; i++) a.insertSphere(i % 3);
+  a.update(1);
+  const earlyBlocked = !a.autoCastReady;
+  for (let i = a.sphereCount; i < COLLECTION_CONFIG.targetSphereCount; i++) a.insertSphere(i % 3);
+  a.update(2);
+  const fullReady = a.sphereCount >= COLLECTION_CONFIG.autoCastMinCount &&
+    a.visibleFillHeight >= COLLECTION_CONFIG.autoCastFillHeight &&
+    a.autoCastReady;
+  const ok = earlyBlocked && fullReady;
+  console.log(`${ok ? 'PASS' : 'FAIL'}  visible fill gates auto-cast (${a.sphereCount} beads, ${a.visibleFillHeight.toFixed(2)} fill)`);
   if (!ok) failed = true;
 }
 

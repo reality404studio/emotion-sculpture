@@ -9,7 +9,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-import { Trophy, BASE_H, GLASS_H } from './trophy.js';
+import { Trophy, BASE_H, GLASS_H, COLLECTION_CONFIG } from './trophy.js';
 import { InputController } from './input.js';
 import {
   createSession,
@@ -25,7 +25,6 @@ import { FoundryAtmosphere } from './atmosphere.js';
 
 // ── 타이밍 ──
 const TICK_MS = 700; // 링 하나 = 0.7s (§5.5)
-const SESSION_MS = 180_000; // 3분 하이라이트 (§2)
 
 // ── DOM ──
 const $ = (s) => document.querySelector(s);
@@ -246,12 +245,71 @@ atmosphere.setPixelRatio(renderPixelRatio());
 // 상태
 // ─────────────────────────────────────────────────────────────
 let phase = 'idle';
+let castState = 'COLLECTING';
 let session = null;
 let sculpture = null;
 let input = null;
 let compareGroup = null;
 let compareTrophies = [];
 let ruler = null; // 결과 화면의 발광 시간 눈금자
+let lastSphereInsertedAt = -Infinity;
+
+const CAST_TRANSITIONS = Object.freeze({
+  COLLECTING: new Set(['MANUAL_CAST_READY', 'AUTO_CAST_READY']),
+  MANUAL_CAST_READY: new Set(['AUTO_CAST_READY', 'MELTING']),
+  AUTO_CAST_READY: new Set(['MELTING']),
+  MELTING: new Set(['COOLING']),
+  COOLING: new Set(['COOLED']),
+  COOLED: new Set(),
+});
+
+const debugOverlay = import.meta.env.DEV ? document.createElement('pre') : null;
+if (debugOverlay) {
+  debugOverlay.id = 'cast-debug';
+  debugOverlay.hidden = true;
+  document.body.appendChild(debugOverlay);
+}
+
+function transitionCastState(next) {
+  if (next === castState) return true;
+  if (!CAST_TRANSITIONS[castState]?.has(next)) return false;
+  castState = next;
+  updateCastControls();
+  return true;
+}
+
+function updateCastControls() {
+  const count = sculpture?.sphereCount ?? 0;
+  const acceptingManualCast = phase === 'live' &&
+    (castState === 'COLLECTING' || castState === 'MANUAL_CAST_READY');
+  if (count < COLLECTION_CONFIG.minManualCastCount) {
+    endBtn.disabled = true;
+    endBtn.textContent = `ADD ${COLLECTION_CONFIG.minManualCastCount - count} MORE`;
+  } else {
+    endBtn.disabled = !acceptingManualCast;
+    endBtn.textContent = 'CAST NOW';
+  }
+  palette.querySelectorAll('button').forEach((button) => {
+    button.disabled = phase === 'live' && castState === 'AUTO_CAST_READY';
+  });
+}
+
+function updateDebugOverlay() {
+  if (!debugOverlay) return;
+  debugOverlay.hidden = phase === 'idle' || phase === 'compare';
+  if (debugOverlay.hidden) return;
+  const metrics = sculpture?.debugMetrics ?? {};
+  debugOverlay.textContent = [
+    `STATE: ${castState}`,
+    `SPHERES: ${metrics.sphereCount ?? 0} / ${COLLECTION_CONFIG.targetSphereCount}`,
+    `VISIBLE FILL: ${(metrics.visibleFillHeight ?? 0).toFixed(2)}`,
+    `MANUAL READY: ${(metrics.sphereCount ?? 0) >= COLLECTION_CONFIG.minManualCastCount ? 'YES' : 'NO'}`,
+    `AUTO READY: ${castState === 'AUTO_CAST_READY' ? 'YES' : 'NO'}`,
+    `FLOW COUNT: ${metrics.flowCount ?? 0}`,
+    `LARGEST FLOW: ${(metrics.largestFlowContribution ?? 0).toFixed(2)}`,
+    `CLEAR GLASS: ${(metrics.clearGlassFraction ?? 1).toFixed(2)}`,
+  ].join('\n');
+}
 
 function setResultPanelExpanded(expanded) {
   resultCard.classList.toggle('is-collapsed', !expanded);
@@ -383,6 +441,8 @@ function startMatch() {
   sculpture.setPixelRatio(renderPixelRatio());
   scene.add(sculpture.group);
   sculpture.beginLive();
+  castState = 'COLLECTING';
+  lastSphereInsertedAt = -Infinity;
 
   input = new InputController({
     onVisualPulse: (emo, detail) => {
@@ -411,6 +471,7 @@ function startMatch() {
   resultEl.hidden = true;
   phaseTag.textContent = 'COLLECTING / GLASS IN MOLD';
   document.body.classList.add('is-live');
+  updateCastControls();
   // 점화 클로즈업에서 시작해 주조선과 함께 올라가는 카메라·조명 시퀀스.
   cinematic.beginLive();
 }
@@ -419,7 +480,9 @@ function startMatch() {
 // Phase: 종료 → 박제 화면
 // ─────────────────────────────────────────────────────────────
 async function endMatch() {
-  if (phase !== 'live') return;
+  if (phase !== 'live' ||
+      (castState !== 'MANUAL_CAST_READY' && castState !== 'AUTO_CAST_READY')) return;
+  transitionCastState('MELTING');
   phase = 'casting';
   const finishingSession = session;
   input.disable();
@@ -435,12 +498,18 @@ async function endMatch() {
   revealCamera();
   window.setTimeout(() => {
     if (phase !== 'casting' || session !== finishingSession) return;
+    transitionCastState('COOLED');
     phase = 'result';
     document.body.classList.remove('is-revealing');
     resultEl.hidden = false;
     if (ruler) ruler.group.visible = !viewport.portrait;
     phaseTag.textContent = 'COOLED / MOVE TO INSPECT';
   }, 5400);
+  window.setTimeout(() => {
+    if (phase === 'casting' && session === finishingSession && castState === 'MELTING') {
+      transitionCastState('COOLING');
+    }
+  }, 3550);
 
   session.signatureHash = await computeSculptureHash(session);
   saveSession(session);
@@ -519,11 +588,44 @@ function castTargetScreen() {
   };
 }
 
+function queueAutomaticCast() {
+  if (castState !== 'AUTO_CAST_READY' || session.autoCastQueued) return;
+  session.autoCastQueued = true;
+  input.disable();
+  castFeedback.replaceChildren();
+  phaseTag.textContent = 'MOLD FULL / SETTLING';
+  updateCastControls();
+  window.setTimeout(() => {
+    if (phase !== 'live' || castState !== 'AUTO_CAST_READY') return;
+    phaseTag.textContent = 'MOLD FULL / CASTING';
+    endMatch();
+  }, COLLECTION_CONFIG.settleDurationMs + 250);
+}
+
+function refreshCastReadiness(now = performance.now()) {
+  if (phase !== 'live' || !sculpture || castState === 'AUTO_CAST_READY') return;
+  const count = sculpture.sphereCount;
+  if (count >= COLLECTION_CONFIG.minManualCastCount && castState === 'COLLECTING') {
+    transitionCastState('MANUAL_CAST_READY');
+    phaseTag.textContent = 'MANUAL CAST READY / KEEP FILLING';
+  }
+  // A bead needs 720ms to fall plus its damped bounce. Do not let airborne
+  // centers impersonate a full bowl; the configured settle hold follows this.
+  const settledLongEnough = now - lastSphereInsertedAt >= COLLECTION_CONFIG.settleDurationMs + 750;
+  if (settledLongEnough && sculpture.autoCastReady &&
+      (castState === 'COLLECTING' || castState === 'MANUAL_CAST_READY')) {
+    transitionCastState('AUTO_CAST_READY');
+    queueAutomaticCast();
+  }
+}
+
 function placeGlassBead(emo, detail, soundVoice) {
-  if (phase === 'live' && sculpture) {
+  if (phase === 'live' && sculpture &&
+      (castState === 'COLLECTING' || castState === 'MANUAL_CAST_READY')) {
     const countBefore = sculpture.materials.length;
-    const isFull = sculpture.insertSphere(emo, detail);
+    sculpture.insertSphere(emo, detail);
     if (sculpture.materials.length > countBefore) {
+      lastSphereInsertedAt = performance.now();
       session.materials.push({
         emotion: emo,
         atMs: Math.round(elapsed),
@@ -532,11 +634,8 @@ function placeGlassBead(emo, detail, soundVoice) {
       });
       sculpture.impact(emo);
       cinematic.impact(emo, sculpture.castFrontY());
-    }
-    if (isFull && !session.autoCastQueued) {
-      session.autoCastQueued = true;
-      phaseTag.textContent = 'MOLD FULL / CASTING';
-      window.setTimeout(() => endMatch(), 900);
+      refreshCastReadiness(lastSphereInsertedAt);
+      updateCastControls();
     }
   }
   castSound.impact(emo, soundVoice);
@@ -654,10 +753,11 @@ function animate() {
     sculpture.setCastProgress();
     liveProgress = sculpture.castU;
 
-    if (elapsed >= SESSION_MS) endMatch();
   }
 
   if (sculpture) sculpture.update(now / 1000);
+  refreshCastReadiness(now);
+  updateDebugOverlay();
   atmosphere.update(now / 1000);
   compareTrophies.forEach((t) => t.update(now / 1000));
   cinematic.update(dt / 1000, {

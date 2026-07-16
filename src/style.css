@@ -74,6 +74,7 @@ button {
 button:hover { border-color: var(--line-strong); }
 button:active { transform: scale(0.975); }
 button span { color: currentColor; margin-left: 8px; }
+button:disabled { cursor: not-allowed; opacity: 0.48; transform: none; }
 
 .primary {
   border-color: var(--ivory);
@@ -266,6 +267,24 @@ button span { color: currentColor; margin-left: 8px; }
 .cast-bead { position: absolute; top: 0; left: 0; width: 5.5px; height: 5.5px; margin: -2.75px 0 0 -2.75px; opacity: 0; transform-origin: center; will-change: transform, opacity; }
 .cast-bead > i { position: absolute; inset: 0; border: .5px solid color-mix(in srgb, var(--cast-color) 58%, white); border-radius: 50%; background: radial-gradient(circle at 32% 24%, rgba(255,255,255,.92) 0 7%, rgba(255,255,255,.22) 8% 18%, transparent 20%), radial-gradient(circle at 58% 68%, color-mix(in srgb, var(--cast-color) 88%, #111) 0 38%, color-mix(in srgb, var(--cast-color) 64%, transparent) 68%, rgba(255,255,255,.44) 100%); box-shadow: inset -1px -1px 2px rgba(0,0,0,.24), 0 1px 3px rgba(0,0,0,.32); }
 .cast-bead--2 { width: 4.75px; height: 4.75px; margin: -2.375px 0 0 -2.375px; }
+
+#cast-debug {
+  position: fixed;
+  top: 82px;
+  left: 28px;
+  z-index: 30;
+  margin: 0;
+  padding: 11px 13px;
+  color: #26302e;
+  border: 1px solid rgba(42, 54, 51, .18);
+  border-radius: 10px;
+  background: rgba(255, 255, 252, .86);
+  box-shadow: 0 10px 32px rgba(45, 54, 51, .1);
+  font: 9px/1.55 var(--mono);
+  letter-spacing: .04em;
+  pointer-events: none;
+  white-space: pre;
+}
 
 /* 결과는 조형을 가리는 대형 리포트가 아니라 우측 하단의 작은 인증 패널이다. */
 #result { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
